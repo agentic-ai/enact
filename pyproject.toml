@@ -1,0 +1,12 @@
+[project]
+name = "enact"
+version = "0.0.1"
+dependencies = [
+  "gradio",
+  "numpy",
+  "Pillow",
+]
+
+[tool.setuptools.packages.find]
+include = ["enact*"]
+exclude = ["tests*", "tutorials*", "examples*"]
