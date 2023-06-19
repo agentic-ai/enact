@@ -471,11 +471,11 @@
         },
         "gradio": {
             "hashes": [
-                "sha256:1cd8b25b598d983561d64f0a039af819382f1376c676aa9f84972c46b6875741",
-                "sha256:fd7fa7257ffc749f9dc7c297eba554eaa1e5acd1a5f9c973250b2080932d6a41"
+                "sha256:6dc42dedaab583198dbbecc605759cbb154f6066f4f0515b26cf976331786c9a",
+                "sha256:72bafe6e0278e28df0a7ce729b5e4ad8cdb2e07f3cac853b0a73463f38d63bbb"
             ],
-            "markers": "python_version >= '3.7'",
-            "version": "==3.34.0"
+            "markers": "python_version >= '3.8'",
+            "version": "==3.35.2"
         },
         "gradio-client": {
             "hashes": [
@@ -1104,11 +1104,11 @@
         },
         "pyparsing": {
             "hashes": [
-                "sha256:2b020ecf7d21b687f219b71ecad3631f644a47f01403fa1d1036b0c6416d70fb",
-                "sha256:5026bae9a10eeaefb61dab2f09052b9f4307d44aee4eda64b309723d8d206bbc"
+                "sha256:d554a96d1a7d3ddaf7183104485bc19fd80543ad6ac5bdb6426719d766fb06c1",
+                "sha256:edb662d6fe322d6e990b1594b5feaeadf806803359e3d4d42f11e295e588f0ea"
             ],
             "markers": "python_full_version >= '3.6.8'",
-            "version": "==3.0.9"
+            "version": "==3.1.0"
         },
         "pyrsistent": {
             "hashes": [
@@ -1268,19 +1268,12 @@
             "markers": "python_version >= '3.7'",
             "version": "==4.65.0"
         },
-        "types-pillow": {
-            "hashes": [
-                "sha256:69427d9fa4320ff6e30f00fb9c0dd71185dc0a16de4757774220104759483466",
-                "sha256:f1b6af47abd151847ee25911ffeba784899bc7dc7f9eba8ca6a5aac522b012ef"
-            ],
-            "version": "==9.5.0.4"
-        },
         "typing-extensions": {
             "hashes": [
                 "sha256:88a4153d8505aabbb4e13aacb7c486c2b4a33ca3b3f807914a9b4c844c471c26",
                 "sha256:d91d5919357fe7f681a9f2b5b4cb2a5f1ef0a1e9f59c4d8ff0d3491e05c0ffd5"
             ],
-            "markers": "python_version >= '3.7'",
+            "markers": "python_version < '3.11'",
             "version": "==4.6.3"
         },
         "tzdata": {
@@ -1544,11 +1537,11 @@
         },
         "importlib-metadata": {
             "hashes": [
-                "sha256:43dd286a2cd8995d5eaef7fee2066340423b818ed3fd70adf0bad5f1fac53fed",
-                "sha256:92501cdf9cc66ebd3e612f1b4f0c0765dfa42f0fa38ffb319b6bd84dd675d705"
+                "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4",
+                "sha256:cb52082e659e97afc5dac71e79de97d8681de3aa07ff18578330904a9d18e5b5"
             ],
             "markers": "python_version < '3.10'",
-            "version": "==6.6.0"
+            "version": "==6.7.0"
         },
         "ipykernel": {
             "hashes": [
@@ -1679,11 +1672,11 @@
         },
         "platformdirs": {
             "hashes": [
-                "sha256:0ade98a4895e87dc51d47151f7d2ec290365a585151d97b4d8d6312ed6132fed",
-                "sha256:e48fabd87db8f3a7df7150a4a5ea22c546ee8bc39bc2473244730d4b56d2cc4e"
+                "sha256:57e28820ca8094678b807ff529196506d7a21e17156cb1cddb3e74cebce54640",
+                "sha256:ffa199e3fbab8365778c4a10e1fbf1b9cd50707de826eb304b50e57ec0cc8d38"
             ],
             "markers": "python_version >= '3.7'",
-            "version": "==3.5.3"
+            "version": "==3.6.0"
         },
         "prompt-toolkit": {
             "hashes": [
@@ -1879,6 +1872,7 @@
                 "sha256:69427d9fa4320ff6e30f00fb9c0dd71185dc0a16de4757774220104759483466",
                 "sha256:f1b6af47abd151847ee25911ffeba784899bc7dc7f9eba8ca6a5aac522b012ef"
             ],
+            "index": "pypi",
             "version": "==9.5.0.4"
         },
         "typing-extensions": {
@@ -1886,7 +1880,7 @@
                 "sha256:88a4153d8505aabbb4e13aacb7c486c2b4a33ca3b3f807914a9b4c844c471c26",
                 "sha256:d91d5919357fe7f681a9f2b5b4cb2a5f1ef0a1e9f59c4d8ff0d3491e05c0ffd5"
             ],
-            "markers": "python_version >= '3.7'",
+            "markers": "python_version < '3.11'",
             "version": "==4.6.3"
         },
         "wcwidth": {
