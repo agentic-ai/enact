@@ -14,6 +14,7 @@
 
 import abc
 import dataclasses
+import time
 import traceback
 from typing import Callable, Generic, Iterable, List, Mapping, Optional, Type, TypeVar
 from enact import contexts
@@ -91,33 +92,44 @@ class Response(Generic[I_contra, O_co], resources.Resource):
 
 @resource_registry.register
 @dataclasses.dataclass
+class TimestampedResource(resources.Resource):
+  timestamp_ns: int = dataclasses.field(
+    default_factory=lambda: int(time.time_ns()))
+
+  def update_timestamp(self):
+    self.timestamp_ns = int(time.time_ns())
+
+
+
+@resource_registry.register
+@dataclasses.dataclass
 class Invocation(Generic[I_contra, O_co], resources.Resource):
-  """A (possibly-incomplete) invocation."""
+  """An invocation."""
   request: references.Ref[Request[I_contra, O_co]]
-  response: Optional[references.Ref[Response[I_contra, O_co]]]
-  children: Optional[List[references.Ref['Invocation']]]
+  response: references.Ref[Response[I_contra, O_co]]
+  children: List[references.Ref['Invocation']]
 
   def successful(self) -> bool:
     """Returns true if the invocation completed successfully."""
     if not self.response:
       return False
-    return self.get_response().output is not None
+    return self.response.get().output is not None
+
+  def get_input(self) -> O_co:
+    """Returns the output or raise assertion error."""
+    return self.request.get().input.get()
 
   def get_output(self) -> O_co:
     """Returns the output or raise assertion error."""
-    return references.get(self.get_response().output)
+    output = self.response.get().output
+    assert output
+    return output.get()
 
   def get_raised(self) -> ExceptionResource:
     """Returns the raised exception or raise assertion error."""
-    return references.get(self.get_response().raised)
-
-  def get_response(self) -> Response[I_contra, O_co]:
-    """Returns the response or raise assertion error."""
-    return references.get(self.response)
-
-  def get_request(self) -> Request[I_contra, O_co]:
-    """Returns the response or raise assertion error."""
-    return references.get(self.request)
+    raised = self.response.get().raised
+    assert raised
+    return raised.get()
 
   def get_children(self) -> Iterable['Invocation']:
     """Yields the child invocations or raises assertion error."""
