@@ -83,6 +83,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
     """Returns a string version of this reference."""
     return json.dumps(dict(self.field_items()), sort_keys=True)
 
+  def __hash__(self) -> int:
+    """Hash representation."""
+    return hash(self.id)
+
   @classmethod
   def from_id(cls: Type[P], id: str) -> P:
     """Returns a string version of this reference."""
