@@ -16,7 +16,7 @@ import abc
 import dataclasses
 import time
 import traceback
-from typing import Callable, Generic, Iterable, List, Mapping, Optional, Type, TypeVar
+from typing import Callable, Generic, Iterable, List, Mapping, Optional, Set, Type, TypeVar
 from enact import contexts
 from enact import interfaces
 from enact import references
@@ -85,6 +85,8 @@ class Response(Generic[I_contra, O_co], resources.Resource):
   output: Optional[references.Ref[O_co]]
   # Exception raised during call.
   raised: Optional[references.Ref[ExceptionResource]]
+  # Whether the exception was raised locally or propagated from a child.
+  raised_here: bool
   # Subinvocations associated with this invocation.
   children: List[references.Ref['Invocation']]
 
@@ -124,6 +126,12 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
     assert raised
     return raised.get()
 
+  def get_raised_here(self) -> bool:
+    """Whether the exception was originally raised here or in a child."""
+    response = self.response.get()
+    assert response.raised, 'No exception was raised.'
+    return response.raised_here
+
   def get_children(self) -> Iterable['Invocation']:
     """Yields the child invocations or raises assertion error."""
     children = self.response.get().children
@@ -140,16 +148,26 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       invokable: 'InvokableBase[I_contra, O_co]',
       input: references.Ref[I_contra]):
     """Initializes the builder."""
+    self.children: List[references.Ref[Invocation]] = []
+
     self._invokable = invokable
     self._input = input
     self._request = Request(
       references.commit(invokable), input)
     self._invocation: Optional[Invocation] = None
-    self.children: List[references.Ref[Invocation]] = []
+    self._exceptions_raised_by_children: List[Exception] = []
 
   def record_child(self, invocation: Invocation):
     """Records a subinvocation."""
     self.children.append(references.commit(invocation))
+
+  def record_child_exception(self, exception: Exception):
+    """Records a subinvocation."""
+    self._exceptions_raised_by_children.append(exception)
+
+  def _is_child_exception(self, exception: Exception) -> bool:
+    """Records a subinvocation."""
+    return any(exc is exception for exc in self._exceptions_raised_by_children)
 
   @property
   def invocation(self) -> Invocation[I_contra, O_co]:
@@ -163,20 +181,29 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
     with self:
       output: Optional[references.Ref[O_co]] = None
       exception: Optional[references.Ref[ExceptionResource]] = None
+      python_exc: Optional[Exception] = None
       try:
         output_resource = self._invokable.call(self._input.get())
         if output_resource is None:
           output_resource = interfaces.NoneResource()
         output = references.commit(output_resource)
       except ExceptionResource as e:
+        python_exc = e
         exception = references.commit(e)
         raise
       except Exception as e:
+        python_exc = e
         exception = references.commit(WrappedException(traceback.format_exc()))
         raise
       finally:
+        raised_here = False
+        if python_exc:
+          if parent:
+            parent.record_child_exception(python_exc)
+          raised_here = not self._is_child_exception(python_exc)
         response = Response(
-          references.commit(self._invokable), output, exception, self.children)
+          references.commit(self._invokable), output,
+          exception, raised_here, self.children)
         self._invocation = Invocation(
           references.commit(self._request),
           references.commit(response))

@@ -125,6 +125,7 @@ class InvocationsTest(unittest.TestCase):
             invokable=enact.commit(fun),
             output=enact.commit(Str(v='1salt')),
             raised=None,
+            raised_here=False,
             children=[])),
         timestamp_ns=invocation.timestamp_ns)
     self.assertEqual(
@@ -132,9 +133,11 @@ class InvocationsTest(unittest.TestCase):
       want)
 
   def test_call_nested(self):
+    """Test calling a nested function."""
     self.assertEqual(NestedFunction()(1).v, 11)
 
   def test_invoke_nested(self):
+    """Test invoking a nested function."""
     with self.store:
       invocation = NestedFunction().invoke(
         enact.commit(Int(v=1)))
@@ -235,3 +238,27 @@ class InvocationsTest(unittest.TestCase):
       self.assertEqual(
         invocation.get_output(),
         'Got value error')
+
+  def test_raised_here(self):
+    """Tests that the raised_here field is set correctly."""
+    class PythonErrorOnInvoke(enact.Invokable):
+      def call(self, input: enact.ResourceBase):
+        raise ValueError('foo')
+
+    @dataclasses.dataclass
+    class SubCall(enact.Invokable):
+      invokable: enact.Ref[enact.InvokableBase]
+      def call(self, input: enact.ResourceBase):
+        self.invokable.get()(input)
+
+    with self.store as store:
+      error_fun = PythonErrorOnInvoke()
+      subcall_1 = SubCall(store.commit(error_fun))
+      subcall_2 = SubCall(store.commit(subcall_1))
+
+      invocation = subcall_2.invoke(store.commit(enact.Int(5)))
+      self.assertFalse(invocation.get_raised_here())
+      (subinvocation,) = invocation.get_children()
+      self.assertFalse(subinvocation.get_raised_here())
+      (subsubinvocation,) = subinvocation.get_children()
+      self.assertTrue(subsubinvocation.get_raised_here())
