@@ -56,3 +56,15 @@ class Resource(interfaces.ResourceBase):
                   field_values: Mapping[str, FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
     return cls(**field_values)
+
+  def set_from(self: C, other: C):
+    """Sets the fields of this resource from another resource.
+
+    Implementation of set_from is required to support replays of invokable
+    resources that change their internal state during execution.
+    """
+    if not type(self) == type(other):
+      raise TypeError(f'Cannot set_from {type(other)} into {type(self)}.')
+    copy = other.deep_copy_resource()
+    for field in dataclasses.fields(self):
+      setattr(self, field.name, getattr(copy, field.name))
