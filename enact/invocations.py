@@ -78,7 +78,7 @@ class Response(Generic[I_contra, O_co], resources.Resource):
   """An invocation response."""
   invokable: references.Ref['InvokableBase[I_contra, O_co]']
   output: Optional[references.Ref[O_co]]
-  # Exception raised during invocation.
+  # Exception raised during call.
   raised: Optional[references.Ref[ExceptionResource]]
   # Subinvocations associated with this invocation.
   children: List[references.Ref['Invocation']]
@@ -114,10 +114,10 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
     return output.get()
 
   def get_raised(self) -> ExceptionResource:
-    """Returns an exception raised or unhandled or raises assertion error."""
-    response = self.response.get()
-    assert response.raised
-    return response.raised.get()
+    """Returns the raised exception or raise assertion error."""
+    raised = self.response.get().raised
+    assert raised
+    return raised.get()
 
   def get_children(self) -> Iterable['Invocation']:
     """Yields the child invocations or raises assertion error."""
@@ -226,8 +226,6 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       raise response.raised.get()
     assert response.output
     output = response.output.get()
-    if output is None:
-      output = interfaces.NoneResource()
     output_type = self.get_output_type()
     if output_type and not isinstance(output, output_type):
       raise InvokableTypeError(
@@ -254,6 +252,7 @@ class Invokable(InvokableBase[I_contra, O_co], resources.Resource):
 
 
 I = TypeVar('I', bound=InvokableBase)
+
 
 def typed_invokable(
     input_type: Type[I_contra],
