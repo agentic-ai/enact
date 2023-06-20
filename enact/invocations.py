@@ -50,6 +50,11 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
     return cls(*field_values['args'])
 
 
+@resource_registry.register
+class WrappedException(ExceptionResource):
+  """A python exception wrapped as a resource."""
+
+
 I_contra = TypeVar('I_contra', contravariant=True, bound=interfaces.ResourceBase)
 O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
@@ -139,15 +144,21 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
     self._input = input
     self._request = Request(
       references.commit(invokable), input)
+    self._invocation: Optional[Invocation] = None
     self.children: List[references.Ref[Invocation]] = []
 
   def record_child(self, invocation: Invocation):
     """Records a subinvocation."""
     self.children.append(references.commit(invocation))
 
-  def invocation(self) -> (
-      Invocation[I_contra, O_co]):
-    """Return the completed invocation."""
+  @property
+  def invocation(self) -> Invocation[I_contra, O_co]:
+    assert self._invocation, (
+      'The "call" function must be called before accessing the invocation.')
+    return self._invocation
+
+  def call(self) -> O_co:
+    """Call the invokable and set self.invocation."""
     parent: Optional[Builder] = Builder.get_current()
     with self:
       output: Optional[references.Ref[O_co]] = None
@@ -159,18 +170,19 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
         output = references.commit(output_resource)
       except ExceptionResource as e:
         exception = references.commit(e)
+        raise
       except Exception as e:
-        exception = references.commit(ExceptionResource(traceback.format_exc()))
-      response = Response(
-        references.commit(self._invokable), output, exception, self.children)
-
-    invocation = Invocation(
-      references.commit(self._request),
-      references.commit(response))
-
-    if parent:
-      parent.record_child(invocation)
-    return invocation
+        exception = references.commit(WrappedException(traceback.format_exc()))
+        raise
+      finally:
+        response = Response(
+          references.commit(self._invokable), output, exception, self.children)
+        self._invocation = Invocation(
+          references.commit(self._request),
+          references.commit(response))
+        if parent:
+          parent.record_child(self._invocation)
+      return output_resource
 
 
 class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
@@ -212,20 +224,13 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
         f'Input type {type(arg)} does not match {input_type}.')
 
     parent: Optional[Builder] = Builder.get_current()
+
     # Execution not tracked, so just call the invokable.
     if not parent:
       return self.call(arg)
 
-    invocation = Builder(
-      self, references.commit(arg)).invocation()
-
-    assert invocation.response
-    response = invocation.response.get()
-
-    if response.raised:
-      raise response.raised.get()
-    assert response.output
-    output = response.output.get()
+    builder = Builder(self, references.commit(arg))
+    output = builder.call()
     output_type = self.get_output_type()
     if output_type and not isinstance(output, output_type):
       raise InvokableTypeError(
@@ -243,7 +248,12 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """
     with Builder.top_level():
       # Execute in a top-level context to ensure that there are no parents.
-      return Builder(self, arg).invocation()
+      builder = Builder(self, arg)
+      try:
+        builder.call()
+      except Exception:
+        pass  # Do nothing
+      return builder.invocation
 
 
 @dataclasses.dataclass

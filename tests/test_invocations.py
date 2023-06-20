@@ -203,3 +203,35 @@ class InvocationsTest(unittest.TestCase):
       assert isinstance(invocation, enact.Invocation)
       self.assertEqual(
         len(list(invocation.get_children())), 10)
+
+  def test_wrapped_resource(self):
+    """Tests that exceptions are tracked as wrapped."""
+    class PythonErrorOnInvoke(enact.Invokable):
+      def call(self, input: enact.ResourceBase):
+        raise ValueError('foo')
+    with self.store as store:
+      fun = PythonErrorOnInvoke()
+      invocation = fun.invoke(store.commit(enact.Int(5)))
+      self.assertIsInstance(
+        invocation.get_raised(),
+        enact.WrappedException)
+
+  def test_raise_native_error(self):
+    """Tests that exceptions are raised in native format."""
+    class PythonErrorOnInvoke(enact.Invokable):
+      def call(self, input: enact.ResourceBase):
+        raise ValueError('foo')
+    class ExpectValueError(enact.Invokable):
+      def call(self, input: enact.ResourceBase):
+        try:
+          PythonErrorOnInvoke()(enact.Int(3))
+        except ValueError:
+          return enact.Str('Got value error')
+        raise Exception('Expected ValueError')
+
+    with self.store as store:
+      fun = ExpectValueError()
+      invocation = fun.invoke(store.commit(enact.Int(5)))
+      self.assertEqual(
+        invocation.get_output(),
+        'Got value error')
