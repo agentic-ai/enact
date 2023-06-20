@@ -30,6 +30,7 @@ from enact.invocations import Invocation
 from enact.invocations import Request
 from enact.invocations import Response
 from enact.invocations import ExceptionResource
+from enact.invocations import WrappedException
 
 from enact.pretty_print import PPrinter
 from enact.pretty_print import pprint
