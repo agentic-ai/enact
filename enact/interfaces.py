@@ -165,6 +165,19 @@ class ResourceBase:
       for k, v in d.items()}
     return cls.from_fields(field_dict)
 
+  def set_from(self: C, other: C):
+    """Sets the fields of this resource from another resource.
+
+    Implementation of set_from is required to support replays of invokable
+    resources that change their internal state during execution.
+
+    Args:
+      other: The resource to set fields from.
+    """
+    raise NotImplementedError(
+      f'Setting fields from another resource is not '
+      f'supported by type {type(self)}.')
+
 
 class ResourceDict(Generic[C], dict, Mapping[str, ResourceDictValue]):
   """A dictionary representing a resource with attached type info."""

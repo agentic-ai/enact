@@ -134,7 +134,7 @@ class RefTest(unittest.TestCase):
     with self.assertRaises(enact.FieldTypeError):
       enact.Ref.pack(a)
 
-  def test_copy(self):
+  def test_deepy_copy_resource(self):
     """Tests that the resource can be deep-copied."""
     a = SimpleResource(SimpleResource(1, 2, 3), [4, None],
                        {'a': 0.0, 'b': [True, False]})
@@ -145,3 +145,13 @@ class RefTest(unittest.TestCase):
     self.assertNotEqual(id(a.b), id(b.b))
     self.assertNotEqual(id(a.c), id(b.c))
     self.assertEqual(enact.Ref.pack(a), enact.Ref.pack(b))
+
+  def test_set_from(self):
+    """Tests that set-from works as expected."""
+    x = SimpleResource(SimpleResource(1, 2, 3), [4, None],
+                       {'a': 0.0, 'b': [True, False]})
+    y = SimpleResource(None, None, None)
+    y.set_from(x)
+    self.assertEqual(y, x)
+    x.a.a = 5
+    self.assertNotEqual(y, x)
