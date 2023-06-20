@@ -121,8 +121,9 @@ class InvocationsTest(unittest.TestCase):
         response=enact.commit(
           enact.Response(
             invokable=enact.commit(fun),
-            output=enact.commit(Str(v='1salt')))),
-        children=[])
+            output=enact.commit(Str(v='1salt')),
+            raised=None,
+            children=[])))
     self.assertEqual(
       invocation,
       want)
@@ -138,7 +139,7 @@ class InvocationsTest(unittest.TestCase):
       self.assertEqual(output.v, 11)
       self.assertEqual(len(list(invocation.get_children())), 10)
       for i, child in enumerate(invocation.get_children()):
-        self.assertEqual(child.get_input().v, i + 1)
+        self.assertEqual(child.request.get().input.get().v, i + 1)
         output = child.get_output()
         self.assertEqual(output.v, i + 2)
 
@@ -151,8 +152,8 @@ class InvocationsTest(unittest.TestCase):
       self.assertIsInstance(
         exception,
         enact.ExceptionResource)
-      assert invocation.children
-      self.assertEqual(len(invocation.children), 3)
+      assert invocation.response.get().children
+      self.assertEqual(len(invocation.response.get().children), 3)
       for i, child in enumerate(invocation.get_children()):
         if i < 3:
           self.assertEqual(child.request.get().input.get().v, i + 1)

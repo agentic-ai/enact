@@ -42,15 +42,17 @@ class Registry:
     if not issubclass(resource, interfaces.ResourceBase):
       raise RegistryError(
         f'Cannot register non-resource type: {resource}')
+    import traceback as tb
     type_id = resource.type_id()
     if (type_id in self._type_map and
         self._type_map[type_id] != resource and
         not self.allow_reregistration):
       raise RegistryError(
+        f'{id(resource)} == {id(self._type_map[type_id])}\n'
         f'While registering {resource}: '
         f'Type with id {type_id} already '
         f'registered to a different type: '
-        f'{self._type_map[type_id]}')
+        f'{self._type_map[type_id]}\n')
     self._type_map[type_id] = resource
 
   def lookup(self, type_id: str) -> Type[interfaces.ResourceBase]:

@@ -83,7 +83,9 @@ class Response(Generic[I_contra, O_co], resources.Resource):
   """An invocation response."""
   invokable: references.Ref['InvokableBase[I_contra, O_co]']
   output: Optional[references.Ref[O_co]]
-  raised: Optional[references.Ref[ExceptionResource]] = None
+  raised: Optional[references.Ref[ExceptionResource]]
+  # Subinvocations associated with this invocation.
+  children: List[references.Ref['Invocation']]
 
   def is_complete(self) -> bool:
     """Returns whether this invocation is complete."""
@@ -92,32 +94,16 @@ class Response(Generic[I_contra, O_co], resources.Resource):
 
 @resource_registry.register
 @dataclasses.dataclass
-class TimestampedResource(resources.Resource):
-  timestamp_ns: int = dataclasses.field(
-    default_factory=lambda: int(time.time_ns()))
-
-  def update_timestamp(self):
-    self.timestamp_ns = int(time.time_ns())
-
-
-
-@resource_registry.register
-@dataclasses.dataclass
 class Invocation(Generic[I_contra, O_co], resources.Resource):
   """An invocation."""
   request: references.Ref[Request[I_contra, O_co]]
   response: references.Ref[Response[I_contra, O_co]]
-  children: List[references.Ref['Invocation']]
 
   def successful(self) -> bool:
     """Returns true if the invocation completed successfully."""
     if not self.response:
       return False
     return self.response.get().output is not None
-
-  def get_input(self) -> O_co:
-    """Returns the output or raise assertion error."""
-    return self.request.get().input.get()
 
   def get_output(self) -> O_co:
     """Returns the output or raise assertion error."""
@@ -133,8 +119,8 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
 
   def get_children(self) -> Iterable['Invocation']:
     """Yields the child invocations or raises assertion error."""
-    assert self.children is not None
-    for child in self.children:
+    children = self.response.get().children
+    for child in children:
       yield child.get()
 
 
@@ -174,12 +160,11 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       except Exception as e:
         exception = references.commit(ExceptionResource(traceback.format_exc()))
       response = Response(
-        references.commit(self._invokable), output, exception)
+        references.commit(self._invokable), output, exception, self.children)
 
     invocation = Invocation(
       references.commit(self._request),
-      references.commit(response),
-      self.children)
+      references.commit(response))
 
     if parent:
       parent.record_child(invocation)
