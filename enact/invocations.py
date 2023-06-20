@@ -98,6 +98,12 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
   """An invocation."""
   request: references.Ref[Request[I_contra, O_co]]
   response: references.Ref[Response[I_contra, O_co]]
+  timestamp_ns: int = dataclasses.field(default_factory=lambda: Invocation.now())
+
+  @classmethod
+  def now(cls) -> int:
+    """Returns the current timestamp."""
+    return time.time_ns()
 
   def successful(self) -> bool:
     """Returns true if the invocation completed successfully."""

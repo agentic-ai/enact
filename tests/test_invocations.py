@@ -15,8 +15,10 @@
 """Tests for invocations."""
 
 import dataclasses
+import time
 from typing import Optional
 import unittest
+from unittest import mock
 
 import enact
 from enact import invocations
@@ -123,7 +125,8 @@ class InvocationsTest(unittest.TestCase):
             invokable=enact.commit(fun),
             output=enact.commit(Str(v='1salt')),
             raised=None,
-            children=[])))
+            children=[])),
+        timestamp_ns=invocation.timestamp_ns)
     self.assertEqual(
       invocation,
       want)
@@ -169,18 +172,19 @@ class InvocationsTest(unittest.TestCase):
 
   def test_no_parent_on_invoke(self):
     """Tests that invocations are tracked in a fresh context."""
-    with self.store as store:
-      fun = IntToStr()
-      with invocations.Builder(fun, store.commit(Int(v=1))) as builder:
-        # Enter an unrelated context.
-        nested = NestedFunction()
-        inner_invocation = nested.invoke(store.commit(Int(1)))
-        # The invocation should not be tracked in the builder.
-        self.assertEqual(builder.children, [])
-      # Redo the invocation outside the builder.
-      outer_invocation = nested.invoke(store.commit(Int(1)))
-      # Ensure that executing in the misleading context made no difference.
-      self.assertEqual(outer_invocation, inner_invocation)
+    with mock.patch.object(time, 'time_ns', return_value=0):
+      with self.store as store:
+        fun = IntToStr()
+        with invocations.Builder(fun, store.commit(Int(v=1))) as builder:
+          # Enter an unrelated context.
+          nested = NestedFunction()
+          inner_invocation = nested.invoke(store.commit(Int(1)))
+          # The invocation should not be tracked in the builder.
+          self.assertEqual(builder.children, [])
+        # Redo the invocation outside the builder.
+        outer_invocation = nested.invoke(store.commit(Int(1)))
+        # Ensure that executing in the misleading context made no difference.
+        self.assertEqual(outer_invocation, inner_invocation)
 
   def test_meta_invoke(self):
     """Tests that meta-invocations are tracked correctly."""
