@@ -138,7 +138,7 @@ class InvocationsTest(unittest.TestCase):
       self.assertEqual(output.v, 11)
       self.assertEqual(len(list(invocation.get_children())), 10)
       for i, child in enumerate(invocation.get_children()):
-        self.assertEqual(child.get_request().input.get().v, i + 1)
+        self.assertEqual(child.get_input().v, i + 1)
         output = child.get_output()
         self.assertEqual(output.v, i + 2)
 
