@@ -53,9 +53,13 @@ class WrongOutputType(enact.Invokable):
     return input
 
 
+@dataclasses.dataclass
 @enact.typed_invokable(Int, Int)
 class AddOne(enact.Invokable):
+  fail: bool = False
   def call(self, input: Int) -> Int:
+    if self.fail:
+      raise ValueError('fail')
     return Int(v=input.v + 1)
 
 
@@ -63,6 +67,7 @@ class AddOne(enact.Invokable):
 @dataclasses.dataclass
 class NestedFunction(enact.Invokable):
   fun: AddOne = AddOne()
+  fail: AddOne = AddOne(fail=True)
   iter: int = 10
   fail_on: Optional[int] = None
 
@@ -70,8 +75,9 @@ class NestedFunction(enact.Invokable):
     for i in range(self.iter):
       if i == self.fail_on:
         # Produce wrong input type to cause error.
-        input = Str(v=str(input.v))  # type: ignore
-      input = self.fun(input)
+        input = self.fail(input)
+      else:
+        input = self.fun(input)
     return input
 
 
@@ -158,15 +164,15 @@ class InvocationsTest(unittest.TestCase):
       self.assertIsInstance(
         exception,
         enact.ExceptionResource)
-      assert invocation.response.get().children
-      self.assertEqual(len(invocation.response.get().children), 3)
+      assert invocation.response().children
+      self.assertEqual(len(invocation.response().children), 4)
       for i, child in enumerate(invocation.get_children()):
         if i < 3:
-          self.assertEqual(child.request.get().input.get().v, i + 1)
+          self.assertEqual(child.request().input().v, i + 1)
           output = child.get_output()
           self.assertEqual(output.v, i + 2)
         else:
-          self.assertEqual(child.request.get().input.get().v, 3)
+          self.assertEqual(child.request().input().v, 4)
           self.assertFalse(child.successful())
           exception = child.get_raised()
           self.assertIsInstance(
@@ -262,3 +268,72 @@ class InvocationsTest(unittest.TestCase):
       self.assertFalse(subinvocation.get_raised_here())
       (subsubinvocation,) = subinvocation.get_children()
       self.assertTrue(subsubinvocation.get_raised_here())
+
+  def test_input_changed_error(self):
+    @dataclasses.dataclass
+    class Changeable(enact.Resource):
+      x: int = 0
+
+    class ChangesInput(enact.Invokable):
+      def call(self, input: Changeable):
+        input.x += 1
+        return input
+
+    with self.assertRaises(enact.InputChanged):
+      with self.store as store:
+        ChangesInput().invoke(store.commit(Changeable()))
+
+  def test_replay_call(self):
+    """Test replaying a call."""
+    fun = NestedFunction(fail_on=3)
+    with self.store:
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      with enact.ReplayContext(
+          subinvocations=[invocation],
+          exception_override=lambda x: Int(v=100)):
+        result = fun(Int(v=0))
+      self.assertEqual(result.v, 106)
+
+  def test_replay_partial(self):
+    """Test replaying a partial invocation."""
+    fun = NestedFunction(fail_on=3)
+    with self.store:
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      with invocation.response.modify() as response:
+        del response.children[4:]
+        with response.children[-1].modify() as child:
+          with child.response.modify() as child_response:
+            assert child_response.raised
+            child_response.raised = None
+            child_response.output = enact.commit(Int(v=100))
+      with enact.ReplayContext(
+          subinvocations=[invocation]):
+        result = fun(Int(v=0))
+      self.assertEqual(result.v, 106)
+
+  def test_replay_call_on_mismatch(self):
+    """Test replays are ignored if arguments don't match."""
+    fun = NestedFunction(fail_on=3)
+    with self.store:
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      with enact.ReplayContext(
+          subinvocations=[invocation],
+          exception_override=lambda x: Int(v=100)):
+        with self.assertRaises(ValueError):
+          fun(Int(v=1))
+
+  def test_invoke_with_replay(self):
+    """Test replays are ignored if arguments don't match."""
+    fun = NestedFunction(fail_on=3)
+    with self.store:
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)),
+        replay_from=invocation,
+        exception_override=lambda x: Int(v=100))
+      self.assertEqual(invocation.get_output().v, 106)
+

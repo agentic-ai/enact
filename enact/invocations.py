@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import abc
+import contextlib
 import dataclasses
 import time
 import traceback
-from typing import Callable, Generic, Iterable, List, Mapping, Optional, Set, Type, TypeVar
+from typing import Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
 from enact import contexts
 from enact import interfaces
 from enact import references
@@ -70,6 +71,11 @@ class InvokableTypeError(InvocationError, TypeError):
 
 
 @resource_registry.register
+class InputChanged(InvocationError):
+  """Raised when an input changes during invocation."""
+
+
+@resource_registry.register
 @dataclasses.dataclass
 class Request(Generic[I_contra, O_co], resources.Resource):
   """An invocation request."""
@@ -95,6 +101,11 @@ class Response(Generic[I_contra, O_co], resources.Resource):
     return self.raised is not None or self.output is not None
 
 
+# A function that may override some exceptions that occur during invocation.
+ExceptionOverride = Callable[[ExceptionResource],
+                             Optional[interfaces.ResourceBase]]
+
+
 @resource_registry.register
 @dataclasses.dataclass
 class Invocation(Generic[I_contra, O_co], resources.Resource):
@@ -112,31 +123,109 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
     """Returns true if the invocation completed successfully."""
     if not self.response:
       return False
-    return self.response.get().output is not None
+    return self.response().output is not None
 
   def get_output(self) -> O_co:
     """Returns the output or raise assertion error."""
-    output = self.response.get().output
+    output = self.response().output
     assert output
-    return output.get()
+    return output()
 
   def get_raised(self) -> ExceptionResource:
     """Returns the raised exception or raise assertion error."""
-    raised = self.response.get().raised
+    raised = self.response().raised
     assert raised
-    return raised.get()
+    return raised()
 
   def get_raised_here(self) -> bool:
     """Whether the exception was originally raised here or in a child."""
-    response = self.response.get()
+    response = self.response()
     assert response.raised, 'No exception was raised.'
     return response.raised_here
 
   def get_children(self) -> Iterable['Invocation']:
     """Yields the child invocations or raises assertion error."""
-    children = self.response.get().children
+    children = self.response().children
     for child in children:
-      yield child.get()
+      yield child()
+
+  def replay(
+      self,
+      exception_override: ExceptionOverride=lambda x: None) -> (
+        'Invocation[I_contra, O_co]'):
+    """Replay the invocation, retrying exceptions or overiding them."""
+    return self.request().invokable().invoke(
+      self.request().input, exception_override=exception_override)
+
+
+@contexts.register
+class ReplayContext(Generic[I_contra, O_co], contexts.Context):
+  """A replay of an invocation."""
+
+  def __init__(
+      self,
+      subinvocations: Iterable[Invocation[I_contra, O_co]],
+      exception_override: ExceptionOverride=lambda x: None):
+    self._exception_override = exception_override
+    self._available_children = list(subinvocations)
+
+  @classmethod
+  def call_or_replay(
+      cls, invokable: 'InvokableBase[I_contra, O_co]', arg: I_contra):
+    """If there is a replay active, try to use it."""
+    context: Optional[ReplayContext[I_contra, O_co]] = (
+      ReplayContext.get_current())
+    if context:
+      replayed_output, child_ctx = context._consume_replay(invokable, arg)
+      if replayed_output:
+        return replayed_output
+      else:
+        with child_ctx:
+          return invokable.call(arg)
+    return invokable.call(arg)
+
+  def _consume_replay(
+      self,
+      invokable: 'InvokableBase[I_contra, O_co]',
+      input: I_contra) -> Tuple[Optional[O_co], 'ReplayContext[I_contra, O_co]']:
+    """Replay the invocation if possible and return a child context."""
+    for i, child in enumerate(self._available_children):
+      if (child.request().invokable == references.commit(invokable) and
+          child.request().input == references.commit(input)):
+        break
+    else:
+      # No matching replay found.
+      return None, ReplayContext([], self._exception_override)
+
+    # Consume child invocation
+    self._available_children.pop(i)
+
+    response = child.response()
+
+    # Replay successful executions.
+    if response.output:
+      return response.output(), ReplayContext(
+        list(child.get_children()),
+        self._exception_override)
+
+    # Check for exception override
+    if response.raised and response.raised_here:
+      # Only override exceptions raised in the current frame.
+      override = self._exception_override(response.raised())
+      if override is not None:
+        # Typecheck the override.
+        output_type = invokable.get_output_type()
+        if output_type and not isinstance(override, output_type):
+          raise InvokableTypeError(
+            f'Exception override {override} is not of required type '
+            f'{invokable.get_input_type()}.')
+        return (
+          cast(O_co, override),
+          ReplayContext(child.get_children(), self._exception_override))
+
+    # Trigger reexecution of the invocation.
+    return None, ReplayContext(
+      child.get_children(), self._exception_override)
 
 
 @contexts.register
@@ -183,7 +272,12 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       exception: Optional[references.Ref[ExceptionResource]] = None
       python_exc: Optional[Exception] = None
       try:
-        output_resource = self._invokable.call(self._input.get())
+        input_resource = self._input()
+        output_resource = ReplayContext.call_or_replay(
+          self._invokable, input_resource)
+        if references.commit(input_resource) != self._input:
+          raise InputChanged(
+            'Input changed during invocation. Only the invokable may change.')
         if output_resource is None:
           output_resource = interfaces.NoneResource()
         output = references.commit(output_resource)
@@ -254,7 +348,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
 
     # Execution not tracked, so just call the invokable.
     if not parent:
-      return self.call(arg)
+      return ReplayContext.call_or_replay(self, arg)
 
     builder = Builder(self, references.commit(arg))
     output = builder.call()
@@ -265,22 +359,40 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     return output
 
   def invoke(
-      self, arg: references.Ref[I_contra]) -> Invocation[I_contra, O_co]:
+      self,
+      arg: references.Ref[I_contra],
+      replay_from: Optional[Invocation[I_contra, O_co]]=None,
+      exception_override: ExceptionOverride=lambda x: x,
+      raise_on_invocation_error:bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 
     Args:
       arg: The input resource.
+      replay_from: An optional invocation to replay form.
+      exception_override: If replaying, an optional override for replayed exceptions.
+      raise_on_invocation_error: Whether invocation errors should be reraised.
     Returns:
       The invocation generated.
     """
-    with Builder.top_level():
-      # Execute in a top-level context to ensure that there are no parents.
+    exit_stack = contextlib.ExitStack()
+    # Execute in a top-level context to ensure that there are no parents.
+    exit_stack.enter_context(Builder.top_level())
+    if replay_from:
+      exit_stack.enter_context(ReplayContext.top_level())
+      exit_stack.enter_context(ReplayContext(
+        [replay_from], exception_override))
+
+    with exit_stack:
       builder = Builder(self, arg)
       try:
         builder.call()
+      except InvocationError:
+        if raise_on_invocation_error:
+          raise
       except Exception:
         pass  # Do nothing
-      return builder.invocation
+      invocation = builder.invocation
+    return invocation
 
 
 @dataclasses.dataclass
