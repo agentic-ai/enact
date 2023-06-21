@@ -236,6 +236,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
     # Replay successful executions.
     if response.output:
+      invokable.set_from(response.invokable())
       return response.output(), ReplayContext(
         list(child.get_children()),
         self._exception_override)

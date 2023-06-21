@@ -299,6 +299,30 @@ class InvocationsTest(unittest.TestCase):
         result = fun(Int(v=0))
       self.assertEqual(result.v, 106)
 
+  def test_replay_modifies_invokable(self):
+    @dataclasses.dataclass
+    class Counter(enact.Invokable):
+      call_count: int = 0
+      def call(self, input: enact.ResourceBase):
+        self.call_count += 1
+        return input
+
+    with self.store as store:
+      counter = Counter()
+      fun = NestedFunction(counter, iter=10)
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      self.assertEqual(counter.call_count, 10)
+
+      # Modify output to ensure we got a replay.
+      with invocation.response.modify() as response:
+        response.output = enact.commit(Int(v=100))
+
+      fun.fun = Counter()
+      result = invocation.replay()
+      self.assertEqual(result.get_output().v, 100)
+      self.assertEqual(counter.call_count, 10)
+
   def test_replay_partial(self):
     """Test replaying a partial invocation."""
     fun = NestedFunction(fail_on=3)
