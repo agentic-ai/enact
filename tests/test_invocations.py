@@ -307,14 +307,15 @@ class InvocationsTest(unittest.TestCase):
         self.call_count += 1
         return input
 
-    with self.store as store:
+    with self.store:
       counter = Counter()
       fun = NestedFunction(counter, iter=10)
       invocation = fun.invoke(
         enact.commit(Int(v=0)))
       self.assertEqual(counter.call_count, 10)
 
-      # Modify output to ensure we got a replay.
+      # Modify output to ensure we got a replay and
+      # not a reexecution.
       with invocation.response.modify() as response:
         response.output = enact.commit(Int(v=100))
 
