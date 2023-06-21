@@ -61,6 +61,36 @@ O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
 
 @resource_registry.register
+class InputRequired(ExceptionResource):
+  """An exception indicating that external input is required.."""
+
+  def __init__(
+      self, invokable: references.Ref['InvokableBase'], arg: references.Ref):
+    super().__init__(invokable, arg)
+
+  @property
+  def invokable(self) -> references.Ref['Request']:
+    return self.args[0]
+
+  @property
+  def input(self) -> references.Ref[interfaces.ResourceBase]:
+    return self.args[1]
+
+  def continue_invocation(
+      self,
+      invocation: 'Invocation[I_contra, O_co]',
+      value: interfaces.ResourceBase) -> (
+        'Invocation[I_contra, O_co]'):
+    """Replays the invocation with the given value."""
+    ref = references.commit(self)
+    def _exception_override(exception_ref: references.Ref[ExceptionResource]):
+      if exception_ref == ref:
+        return value
+      return None
+    return invocation.replay(exception_override=_exception_override)
+
+
+@resource_registry.register
 class InvocationError(ExceptionResource):
   """An error during an invocation."""
 
@@ -102,7 +132,7 @@ class Response(Generic[I_contra, O_co], resources.Resource):
 
 
 # A function that may override some exceptions that occur during invocation.
-ExceptionOverride = Callable[[ExceptionResource],
+ExceptionOverride = Callable[[references.Ref[ExceptionResource]],
                              Optional[interfaces.ResourceBase]]
 
 
@@ -155,7 +185,9 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
         'Invocation[I_contra, O_co]'):
     """Replay the invocation, retrying exceptions or overiding them."""
     return self.request().invokable().invoke(
-      self.request().input, exception_override=exception_override)
+      self.request().input,
+      replay_from=self,
+      exception_override=exception_override)
 
 
 @contexts.register
@@ -211,7 +243,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     # Check for exception override
     if response.raised and response.raised_here:
       # Only override exceptions raised in the current frame.
-      override = self._exception_override(response.raised())
+      override = self._exception_override(response.raised)
       if override is not None:
         # Typecheck the override.
         output_type = invokable.get_output_type()
@@ -362,7 +394,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       self,
       arg: references.Ref[I_contra],
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
-      exception_override: ExceptionOverride=lambda x: x,
+      exception_override: ExceptionOverride=lambda _: None,
       raise_on_invocation_error:bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 

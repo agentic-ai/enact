@@ -25,6 +25,7 @@ from enact.interfaces import ResourceDict
 
 from enact.invocations import ExceptionResource
 from enact.invocations import InputChanged
+from enact.invocations import InputRequired
 from enact.invocations import Invokable
 from enact.invocations import InvokableBase
 from enact.invocations import InvokableBase

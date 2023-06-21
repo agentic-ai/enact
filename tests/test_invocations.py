@@ -16,7 +16,7 @@
 
 import dataclasses
 import time
-from typing import Optional
+from typing import Optional, cast
 import unittest
 from unittest import mock
 
@@ -63,19 +63,23 @@ class AddOne(enact.Invokable):
     return Int(v=input.v + 1)
 
 
+@dataclasses.dataclass
+class Fail(enact.Invokable):
+  def call(self, arg: enact.ResourceBase) -> Int:
+    raise ValueError('fail')
+
+
 @enact.typed_invokable(Int, Int)
 @dataclasses.dataclass
 class NestedFunction(enact.Invokable):
-  fun: AddOne = AddOne()
-  fail: AddOne = AddOne(fail=True)
+  fun: enact.InvokableBase = AddOne()
   iter: int = 10
   fail_on: Optional[int] = None
 
   def call(self, input: Int) -> Int:
     for i in range(self.iter):
       if i == self.fail_on:
-        # Produce wrong input type to cause error.
-        input = self.fail(input)
+        input = Fail()(input)
       else:
         input = self.fun(input)
     return input
@@ -337,3 +341,23 @@ class InvocationsTest(unittest.TestCase):
         exception_override=lambda x: Int(v=100))
       self.assertEqual(invocation.get_output().v, 106)
 
+  def test_input_required(self):
+    class TextInput(enact.Invokable):
+      def call(self, resource: enact.ResourceBase):
+        raise enact.InputRequired(
+          enact.commit(self), enact.commit(resource))
+    fun = NestedFunction(fun=TextInput(), iter=2)
+    with self.store:
+      inputs = ['foo', 'bar', 'bish']
+      invocation = fun.invoke(enact.commit(Str(v=inputs[0])))
+      for cur_input, next_input in zip(inputs[:-1], inputs[1:]):
+        raised = invocation.get_raised()
+        assert isinstance(raised, enact.InputRequired)
+        self.assertEqual(
+          cast(Str, raised.input.get()).v, cur_input)
+        invocation = raised.continue_invocation(
+          invocation, Str(v=next_input))
+      self.assertEqual(invocation.get_output().v, 'bish')
+      child_outputs = [
+        c.get_output().v for c in invocation.get_children()]
+      self.assertEqual(child_outputs, inputs[1:])
