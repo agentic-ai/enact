@@ -341,6 +341,7 @@ class InvocationsTest(unittest.TestCase):
         result = fun(Int(v=0))
       self.assertEqual(result.v, 106)
 
+
   def test_replay_call_on_mismatch(self):
     """Test replays are ignored if arguments don't match."""
     fun = NestedFunction(fail_on=3)
