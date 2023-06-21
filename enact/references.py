@@ -106,6 +106,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
       self._cached = Store.current().get(self)
     return self._cached
 
+  def __call__(self) -> R:
+    """Alias for get."""
+    return self.get()
+
   def set(self, resource: R):
     """Sets the reference to point to the given resource."""
     self._cached = resource
