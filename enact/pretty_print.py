@@ -43,12 +43,19 @@ class PPrinter:
       (interfaces.ResourceBase, self.from_resource),
       (Mapping, self.from_mapping),
       (Sequence, self.from_sequence),
+      (type, self.from_type),
     ]
 
     self.offset = offset
     self.max_ref_depth = max_ref_depth
     self.skip_repeated_refs = skip_repeated_refs
     self._seen_refs: Set[str] = set()
+
+  def from_type(self, v: interfaces.FieldValue, depth: int) -> PPValue:
+    assert isinstance(v, type)
+    assert issubclass(v, interfaces.ResourceBase), (
+      'Only types that are subclasses of ResourceBase are supported.')
+    return PPValue(v.__name__, [])
 
   def primitive_to_str(self, v: interfaces.Primitives) -> str:
     """Converts a primitive to a string."""

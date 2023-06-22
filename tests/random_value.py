@@ -44,7 +44,9 @@ rand_generators: List[Callable[[], enact.FieldValue]] = [
   lambda: rand_str().encode('utf-8'),
   rand_resource,
   rand_sequence,
-  rand_map]
+  rand_map,
+  lambda: R,  # type-valued field.
+]
 
 def rand_value() -> enact.FieldValue:
   """Returns a random value for a field."""

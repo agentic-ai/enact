@@ -96,6 +96,11 @@ def _digest(
       hash.update(repr(k).encode('utf-8'))
       _digest(v, hash, stack)
     hash.update(b']')
+  elif issubclass(value, interfaces.ResourceBase):
+    # Type of resource.
+    hash.update(b'type[')
+    hash.update(value.type_id().encode('utf-8'))
+    hash.update(b']')
   else:
     raise interfaces.FieldTypeError(
       f'Got unexpected field type: {type(value)}. '

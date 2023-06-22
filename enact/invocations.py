@@ -61,20 +61,39 @@ O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
 
 @resource_registry.register
-class InputRequired(ExceptionResource):
+class InputRequest(ExceptionResource):
   """An exception indicating that external input is required.."""
 
   def __init__(
-      self, invokable: references.Ref['InvokableBase'], arg: references.Ref):
-    super().__init__(invokable, arg)
+      self,
+      invokable: references.Ref['InvokableBase'],
+      input: references.Ref,
+      requested_output: Type[interfaces.ResourceBase],
+      context: Optional[references.Ref]):
+    if not references.Store.get_current():
+      raise contexts.NoActiveContext(
+        'InputRequired must be created within a Store context.')
+    super().__init__(
+      invokable,
+      input,
+      requested_output,
+      context)
 
   @property
-  def invokable(self) -> references.Ref['Request']:
+  def invokable(self) -> references.Ref['InvokableBase']:
     return self.args[0]
 
   @property
-  def input(self) -> references.Ref[interfaces.ResourceBase]:
+  def input(self) -> references.Ref:
     return self.args[1]
+
+  @property
+  def requested_type(self) -> Type[interfaces.ResourceBase]:
+    return self.args[2]
+
+  @property
+  def context(self) -> Optional[references.Ref]:
+    return self.args[3]
 
   def continue_invocation(
       self,
@@ -91,6 +110,11 @@ class InputRequired(ExceptionResource):
 
 
 @resource_registry.register
+class InputRequestOutsideInvocation(ExceptionResource):
+  """Raised when input required is called outside an invocation."""
+
+
+@resource_registry.register
 class InvocationError(ExceptionResource):
   """An error during an invocation."""
 
@@ -103,6 +127,38 @@ class InvokableTypeError(InvocationError, TypeError):
 @resource_registry.register
 class InputChanged(InvocationError):
   """Raised when an input changes during invocation."""
+
+
+@resource_registry.register
+class RequestedTypeUndetermined(InvocationError):
+  """Raised when the requested type cannot be determined."""
+
+
+def request_input(
+    requested_type: Optional[Type[interfaces.ResourceBase]]=None,
+    context: Optional[interfaces.ResourceBase]=None):
+  """Requests an input from a user or external system.
+
+  Args:
+    requested_type: The type of input requested. If not specified, the type will
+      be inferred to be the output type of the current invocation.
+    context: Any resource that provides context for the request.
+  Raises:
+    InputRequest: The input request exception.
+    InputRequestOutsideInvocation: If the request was made outside an invocation.
+  """
+  builder: Optional[Builder] = Builder.get_current()
+  if not builder:
+    raise InputRequestOutsideInvocation(context, requested_type)
+  requested_type = requested_type or builder.invokable.get_output_type()
+  if not requested_type:
+    raise RequestedTypeUndetermined(
+      'Requested type must be specified when output type is undetermined.')
+  raise InputRequest(
+    references.commit(builder.invokable),
+    builder.input_ref,
+    requested_type,
+    references.commit(context) if context else None)
 
 
 @resource_registry.register
@@ -272,8 +328,8 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
     """Initializes the builder."""
     self.children: List[references.Ref[Invocation]] = []
 
-    self._invokable = invokable
-    self._input = input
+    self.invokable = invokable
+    self.input_ref = input
     self._request = Request(
       references.commit(invokable), input)
     self._invocation: Optional[Invocation] = None
@@ -305,10 +361,10 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       exception: Optional[references.Ref[ExceptionResource]] = None
       python_exc: Optional[Exception] = None
       try:
-        input_resource = self._input()
+        input_resource = self.input_ref()
         output_resource = ReplayContext.call_or_replay(
-          self._invokable, input_resource)
-        if references.commit(input_resource) != self._input:
+          self.invokable, input_resource)
+        if references.commit(input_resource) != self.input_ref:
           raise InputChanged(
             'Input changed during invocation. Only the invokable may change.')
         if output_resource is None:
@@ -329,7 +385,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
             parent.record_child_exception(python_exc)
           raised_here = not self._is_child_exception(python_exc)
         response = Response(
-          references.commit(self._invokable), output,
+          references.commit(self.invokable), output,
           exception, raised_here, self.children)
         self._invocation = Invocation(
           references.commit(self._request),
@@ -452,3 +508,15 @@ def typed_invokable(
       resource_registry.register(cls)
     return cls
   return _decorator
+
+
+@resource_registry.register
+@dataclasses.dataclass
+class RequestInput(Invokable):
+  """An invokable that raises an InputRequest."""
+  requested_type: Type[interfaces.ResourceBase]
+  context: Optional[interfaces.ResourceBase] = None
+
+  def call(self, resource: interfaces.ResourceBase) -> interfaces.ResourceBase:
+    request_input(self.requested_type, self.context)
+    assert False
