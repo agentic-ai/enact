@@ -16,7 +16,7 @@
 
 import abc
 import json
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, cast
 
 import gradio as gr  # type: ignore
 from gradio import events as gradio_events
@@ -70,6 +70,16 @@ class ResourceWidget(abc.ABC):
   @abc.abstractmethod
   def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
     """Returns the current contents as a resource."""
+
+  def consume(self, component_values: List) -> Optional[interfaces.ResourceBase]:
+    """Returns the contents as a resource and removes args from input list."""
+    return self.get(*self.consume_args(component_values))
+
+  def consume_args(self, component_values: List) -> List:
+    """Return and consume the component arts."""
+    component_args = component_values[:len(self.components)]
+    del component_values[:len(self.components)]
+    return component_args
 
   def set_from_event(
       self,
@@ -236,9 +246,23 @@ class JsonWidget(ResourceWidget):
 class GUI:
   """A gradio GUI component for an invokable."""
 
-  def __init__(self, invokable: references.Ref[invocations.InvokableBase]):
-    """Create a new UI for the component."""
+  def __init__(
+      self,
+      invokable: references.Ref[invocations.InvokableBase],
+      input_required_inputs: Optional[List[Type[interfaces.ResourceBase]]]=None,
+      input_required_outputs: Optional[List[Type[interfaces.ResourceBase]]]=None):
+    """Create a new UI for the component.
+
+    Args:
+      invokable: The invokable resource to create a UI for.
+      input_required_inputs: Input types of invokables that may raise an
+        input required exception.
+      input_rquired_outputs: Output types of invokables that may raise an
+        input required exception.
+    """
     self._invokable = invokable
+    self._input_reqired_inputs = input_required_inputs or []
+    self._input_required_outputs = input_required_outputs or []
 
     input_type = self._invokable.get().get_input_type()
     if not input_type:
@@ -254,6 +278,10 @@ class GUI:
     self._input_widget: Optional[ResourceWidget] = None
     self._output_widget: Optional[ResourceWidget] = None
     self._invocation_widget: Optional[RefWidget] = None
+    self._input_required_input_widgets: Dict[
+      Type[interfaces.ResourceBase], ResourceWidget] = {}
+    self._input_required_output_widgets: Dict[
+      Type[interfaces.ResourceBase], ResourceWidget] = {}
 
     self._widget_types: List[Type[ResourceWidget]] = []
     self.register(JsonWidget)
@@ -315,6 +343,29 @@ class GUI:
     invocation = invokable.get().invoke(references.commit(input_resource))
     return references.commit(invocation)
 
+  def _continue(self, *args) -> Optional[references.Ref[invocations.Invocation]]:
+    """Invoke the object."""
+    component_values = list(args)
+    invocation_ref = self.invocation_widget.consume(component_values)
+    assert isinstance(invocation_ref, references.Ref)
+    invocation = invocation_ref()
+    assert isinstance(invocation, invocations.Invocation)
+    raised = invocation.get_raised()
+    assert isinstance(raised, invocations.InputRequest)
+    requested_type = raised.requested_type
+
+    user_input: Optional[interfaces.ResourceBase]
+    for handled_type, widget in self._input_required_input_widgets.items():
+      if handled_type == requested_type:
+        user_input = widget.consume(component_values)
+      else:
+        widget.consume_args(component_values)
+
+    if not user_input:
+      return None
+    continued = raised.continue_invocation(invocation, user_input)
+    return references.commit(continued)
+
   def _title(self, ref: references.Ref) -> str:
     return f'### *{type(ref.get()).__name__}* `{ref.digest[:6]}`'
 
@@ -346,6 +397,21 @@ class GUI:
         exception_area = gr.TextArea(value='', interactive=False, show_label=False)
 
       with gr.Group():
+        input_required_header_md = gr.Markdown(visible=False)
+        for resource_type in self._input_required_outputs:
+          # Create widgets to display info to the user when querying for input.
+          self._input_required_output_widgets[resource_type] = (
+            self._create_widget_by_resource_type(
+              resource_type, interactive=False, visible=False))
+        input_required_input_md = gr.Markdown(visible=False)
+        for resource_type in self._input_reqired_inputs:
+          # Create widgets to sample input from the user for InputRequired exceptions.
+          self._input_required_input_widgets[resource_type] = (
+            self._create_widget_by_resource_type(
+              resource_type, interactive=True, visible=False))
+        continue_button = gr.Button(value='Continue', visible=False)
+
+      with gr.Group():
         with gr.Accordion(label='Invocation details', open=False):
           self._invocation_widget = RefWidget()
 
@@ -371,17 +437,103 @@ class GUI:
           return None
         return output.get()
 
+      def flatten(l):
+        """Flatten a list of lists."""
+        return [item for sublist in l for item in sublist]
+
+      def component_update(widget: ResourceWidget, **kwargs):
+        """Return a list of updates for the widget components."""
+        return [c.update(**kwargs) for c in widget.components]
+
+      def update_input_required_widgets(
+          updates_list: List[Dict],
+          input_widgets: bool,
+          input_type: Optional[Type[interfaces.ResourceBase]]=None,
+          input_resource: Optional[interfaces.ResourceBase]=None,
+          **kwargs) -> bool:
+        """Updates widgets that handle InputRequired exceptions."""
+        found = False
+        if input_widgets:
+          input_required_widgets = self._input_required_input_widgets
+        else:
+          input_required_widgets = self._input_required_output_widgets
+
+        for resource_type, widget in input_required_widgets.items():
+          if input_type and input_type == resource_type:
+            found = True
+            kwargs['visible'] = True
+            updates_list += widget.set(input_resource, **kwargs)
+          else:
+            kwargs['visible'] = False
+            updates_list += component_update(widget, **kwargs)
+        return found
+
       def handle_invocation_exception(*args):
         """Enable / disable exception and output field."""
-        exception = invocation(*args).response.get().raised
-        if not exception:
-          return (exception_group.update(visible=False),
-                  exception_area.update(value=''),
-                  output_group.update(visible=True))
+        exception_ref = invocation(*args).response.get().raised
+        if not exception_ref:
+          updates = [
+            exception_group.update(visible=False),
+            exception_area.update(value=''),
+            output_group.update(visible=True),
+            input_required_header_md.update(visible=False),
+            input_required_input_md.update(visible=False),
+            continue_button.update(visible=False)]
+          update_input_required_widgets(
+            updates, input_widgets=False, visible=False)
+          update_input_required_widgets(
+            updates, input_widgets=True, visible=False)
+          return updates
+
+        exception = exception_ref()
+        if not isinstance(exception, invocations.InputRequest):
+          updates = [
+            exception_group.update(visible=True),
+            exception_area.update(value=str(exception)),
+            output_group.update(visible=False),
+            input_required_header_md.update(visible=False),
+            input_required_input_md.update(visible=False),
+            continue_button.update(visible=False)]
+          update_input_required_widgets(
+            updates, input_widgets=False, visible=False)
+          update_input_required_widgets(
+            updates, input_widgets=True, visible=False)
+          return updates
+
+        # Try and display the exception causing input to the user.
+        output_to_user = cast(interfaces.ResourceBase, exception.input())
+        requested_input_from_user_type = exception.requested_type
+        updates = []
+        found_output_to_user_widget = update_input_required_widgets(
+          updates, input_widgets=False,
+          input_resource=output_to_user,
+          input_type=type(output_to_user))
+        found_input_from_user_widget = update_input_required_widgets(
+          updates, input_widgets=True,
+          input_type=requested_input_from_user_type)
+
+        # If we found a way to display the output, use it, otherwise just dump
+        # the exception as text.
+
+        if found_input_from_user_widget:
+          md_value = f'Provide input below for {exception.invokable()}:'
         else:
-          return (exception_group.update(visible=True),
-                  exception_area.update(value=str(exception.get())),
-                  output_group.update(visible=False))
+          md_value = (
+            f'User input requested, but no widget found for '
+            f'{exception.requested_type}.')
+        if exception.context:
+          md_value += f'\n\n*Context:*\n\n{pretty_print.pformat(exception.context())}'
+
+        updates_prefix = [
+          exception_group.update(visible=not found_output_to_user_widget),
+          exception_area.update(value='' if found_output_to_user_widget else str(exception)),
+          output_group.update(visible=False),
+          input_required_header_md.update(
+            value='Input requested for the following resource: ',
+            visible=True),
+          input_required_input_md.update(value=md_value, visible=True),
+          continue_button.update(visible=found_input_from_user_widget)]
+        return updates_prefix + updates
 
       def update_title(*args):
         response = invocation(*args).response
@@ -391,11 +543,19 @@ class GUI:
           invokable_details.update(
             value=f'```{pretty_print.pformat(response.get().invokable)}```'))
 
-      # Run the invokable on click.
+      # Run the invokable on clicking Run.
       self.invocation_widget.set_from_event(
         run_button.click,
         contexts.with_current_contexts(self._invoke),
         inputs=self._input_widget.components + self._invocation_widget.components)
+
+      # Continue the invokation on click Continue.
+      self.invocation_widget.set_from_event(
+        continue_button.click,
+        contexts.with_current_contexts(self._continue),
+        inputs=self._invocation_widget.components + flatten(
+          [w.components for w in self._input_required_input_widgets.values()]
+        ))
 
       # Set the input if the invocation changes.
       self._input_widget.set_from_event(
@@ -413,7 +573,14 @@ class GUI:
       self._invocation_widget.change(
         contexts.with_current_contexts(handle_invocation_exception),
         inputs=self._invocation_widget.components,
-        outputs=[exception_group, exception_area, output_group])
+        outputs=[
+          exception_group, exception_area, output_group,
+          input_required_header_md, input_required_input_md,
+          continue_button] +
+          flatten([w.components
+                  for w in self._input_required_output_widgets.values()]) +
+          flatten([w.components
+                  for w in self._input_required_input_widgets.values()]))
 
       # Update the invokable title if the the invokable was updated.
       self._invocation_widget.change(

@@ -25,7 +25,9 @@ from enact.interfaces import ResourceDict
 
 from enact.invocations import ExceptionResource
 from enact.invocations import InputChanged
-from enact.invocations import InputRequired
+from enact.invocations import InputRequest
+from enact.invocations import InputRequestOutsideInvocation
+from enact.invocations import RequestedTypeUndetermined
 from enact.invocations import Invokable
 from enact.invocations import InvokableBase
 from enact.invocations import InvokableBase
@@ -33,8 +35,10 @@ from enact.invocations import Invocation
 from enact.invocations import ReplayContext
 from enact.invocations import Request
 from enact.invocations import Response
-from enact.invocations import WrappedException
+from enact.invocations import request_input
+from enact.invocations import RequestInput
 from enact.invocations import typed_invokable
+from enact.invocations import WrappedException
 
 from enact.pretty_print import PPrinter
 from enact.pretty_print import pprint

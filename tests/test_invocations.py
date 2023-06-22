@@ -366,18 +366,18 @@ class InvocationsTest(unittest.TestCase):
         exception_override=lambda x: Int(v=100))
       self.assertEqual(invocation.get_output().v, 106)
 
-  def test_input_required(self):
+  def test_request_input(self):
     class TextInput(enact.Invokable):
       def call(self, resource: enact.ResourceBase):
-        raise enact.InputRequired(
-          enact.commit(self), enact.commit(resource))
+        raise enact.request_input(Str)
+
     fun = NestedFunction(fun=TextInput(), iter=2)
     with self.store:
       inputs = ['foo', 'bar', 'bish']
       invocation = fun.invoke(enact.commit(Str(v=inputs[0])))
       for cur_input, next_input in zip(inputs[:-1], inputs[1:]):
         raised = invocation.get_raised()
-        assert isinstance(raised, enact.InputRequired)
+        assert isinstance(raised, enact.InputRequest)
         self.assertEqual(
           cast(Str, raised.input.get()).v, cur_input)
         invocation = raised.continue_invocation(
@@ -386,3 +386,40 @@ class InvocationsTest(unittest.TestCase):
       child_outputs = [
         c.get_output().v for c in invocation.get_children()]
       self.assertEqual(child_outputs, inputs[1:])
+
+  def test_input_requested_outside_invocation(self):
+    class TextInput(enact.Invokable):
+      def call(self, resource: enact.ResourceBase):
+        raise enact.request_input(Str)
+    with self.assertRaises(enact.InputRequestOutsideInvocation):
+      TextInput()(Str(v='foo'))
+
+  def test_request_input_infer_type(self):
+    @enact.typed_invokable(Str, Str)
+    class TextInput(enact.Invokable):
+      def call(self, resource: enact.ResourceBase):
+        raise enact.request_input(Str)
+    with self.store:
+      fun = TextInput()
+      invocation = fun.invoke(enact.commit(Str(v='foo')))
+      raised = invocation.get_raised()
+      assert isinstance(raised, enact.InputRequest)
+      self.assertEqual(raised.requested_type, Str)
+
+  def test_request_inference_fails(self):
+    class TextInput(enact.Invokable):
+      def call(self, resource: enact.ResourceBase):
+        raise enact.request_input()
+    with self.store:
+      fun = TextInput()
+      with self.assertRaises(enact.RequestedTypeUndetermined):
+        fun.invoke(enact.commit(Str(v='foo')))
+
+  def test_request_input_class(self):
+    with self.store:
+      fun = enact.RequestInput(enact.Str, enact.Str('Context'))
+      invocation = fun.invoke(enact.commit(enact.Str('foo')))
+      raised = invocation.get_raised()
+      assert isinstance(raised, enact.InputRequest)
+      assert raised.context and raised.context() == 'Context'
+      self.assertEqual(raised.requested_type, enact.Str)
