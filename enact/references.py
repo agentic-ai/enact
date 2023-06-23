@@ -42,7 +42,7 @@ class PackedResource(NamedTuple):
 
 
 P = TypeVar('P', bound='Ref')
-R = TypeVar('R', bound=interfaces.ResourceBase, covariant=True)
+R = TypeVar('R', bound=interfaces.ResourceBase)
 
 
 def get(ref: Optional['Ref[R]']) -> R:
