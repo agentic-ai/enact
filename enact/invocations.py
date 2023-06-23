@@ -287,7 +287,6 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
     # Consume child invocation
     self._available_children.pop(i)
-
     response = child.response()
 
     # Replay successful executions.
@@ -431,6 +430,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
           'Untyped invokables must be called with a single resource argument.')
     else:
       arg = args[0]
+
     if input_type and not isinstance(arg, input_type):
       raise InvokableTypeError(
         f'Input type {type(arg)} does not match {input_type}.')
@@ -451,7 +451,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
 
   def invoke(
       self,
-      arg: references.Ref[I_contra],
+      arg: Optional[references.Ref[I_contra]]=None,
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
       raise_on_invocation_error:bool=True) -> Invocation[I_contra, O_co]:
@@ -465,6 +465,10 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     Returns:
       The invocation generated.
     """
+    if arg is None:
+      arg = cast(references.Ref[I_contra],
+                 references.commit(interfaces.NoneResource()))
+
     exit_stack = contextlib.ExitStack()
     # Execute in a top-level context to ensure that there are no parents.
     exit_stack.enter_context(Builder.top_level())
