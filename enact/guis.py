@@ -177,7 +177,10 @@ class ImageWidget(ResourceWidget):
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements to resource."""
     assert isinstance(resource, resource_types.Image)
-    return [self._image.update(value=resource.value, **kwargs)]
+    if resource:
+      return [self._image.update(value=resource.value, **kwargs)]
+    else:
+      return [self._image.update(value=None, **kwargs)]
 
   def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
     """Returns the current contents as a resource."""
@@ -185,6 +188,34 @@ class ImageWidget(ResourceWidget):
       return None
     return resource_types.Image(
       PIL.Image.fromarray(component_values[0]))
+
+
+class StrWidget(ResourceWidget):
+  """Supports string-type resources."""
+
+  def __init__(self, **kwargs):
+    super().__init__()
+    self._box = self.add(gr.Textbox(**kwargs, show_label=False))
+
+  @classmethod
+  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
+    """Supports all resources."""
+    return issubclass(resource_type, resource_types.Str)
+
+  def set(self,
+          resource: Optional[interfaces.ResourceBase]=None,
+          **kwargs) -> List[Dict[str, Any]]:
+    """Set content and properties of UI elements to resource."""
+    if resource is None:
+      return [self._box.update(value='', **kwargs)]
+    assert isinstance(resource, resource_types.Str)
+    return [self._box.update(value=str(resource), **kwargs)]
+
+  def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
+    """Returns the current contents as a resource."""
+    if component_values[0] is None:
+      return None
+    return resource_types.Str(component_values[0])
 
 
 class JsonWidget(ResourceWidget):
@@ -230,6 +261,8 @@ class JsonWidget(ResourceWidget):
         update_dict['value'] = json.dumps(
           self._serializer.to_json(resource_dict[field_name]),
           indent=2)
+      else:
+        update_dict['value'] = ''
       update_dict.update(kwargs)
       updates.append(self._boxes[field_name].update(**update_dict))
     return updates
@@ -286,6 +319,7 @@ class GUI:
     self._widget_types: List[Type[ResourceWidget]] = []
     self.register(JsonWidget)
     self.register(RefWidget)
+    self.register(StrWidget)
     self.register(ImageWidget)
 
   @property
@@ -416,7 +450,7 @@ class GUI:
           self._invocation_widget = RefWidget()
 
       run_button = gr.Button('Run')
-      def invocation(*args):
+      def get_invocation(*args):
         """Grab the current invocation."""
         ref = self.invocation_widget.get(*args)
         if not ref:
@@ -428,14 +462,14 @@ class GUI:
 
       def invocation_input(*args):
         """Return the input of the current invocation."""
-        return invocation(*args).request.get().input.get()
+        return get_invocation(*args).request().input()
 
       def invocation_output(*args):
         """Return the output of the current invocation."""
-        output = invocation(*args).response.get().output
+        output = get_invocation(*args).response().output
         if not output:
           return None
-        return output.get()
+        return output()
 
       def flatten(l):
         """Flatten a list of lists."""
@@ -470,7 +504,8 @@ class GUI:
 
       def handle_invocation_exception(*args):
         """Enable / disable exception and output field."""
-        exception_ref = invocation(*args).response.get().raised
+        invocation = get_invocation(*args)
+        exception_ref = invocation.response().raised
         if not exception_ref:
           updates = [
             exception_group.update(visible=False),
@@ -514,7 +549,6 @@ class GUI:
 
         # If we found a way to display the output, use it, otherwise just dump
         # the exception as text.
-
         if found_input_from_user_widget:
           md_value = f'Provide input below for {exception.invokable()}:'
         else:
@@ -536,12 +570,12 @@ class GUI:
         return updates_prefix + updates
 
       def update_title(*args):
-        response = invocation(*args).response
+        response = get_invocation(*args).response
         assert response
         return (
-          title.update(value=self._title(response.get().invokable)),
+          title.update(value=self._title(response().invokable)),
           invokable_details.update(
-            value=f'```{pretty_print.pformat(response.get().invokable)}```'))
+            value=f'```{pretty_print.pformat(response().invokable)}```'))
 
       # Run the invokable on clicking Run.
       self.invocation_widget.set_from_event(
