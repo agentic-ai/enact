@@ -308,6 +308,8 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
           raise InvokableTypeError(
             f'Exception override {override} is not of required type '
             f'{invokable.get_input_type()}.')
+        # Set invokable from response.
+        invokable.set_from(response.invokable())
         return (
           cast(O_co, override),
           ReplayContext(child.get_children(), self._exception_override))
