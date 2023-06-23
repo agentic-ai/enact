@@ -146,12 +146,17 @@ class PPrinter:
 
 
 def pprint(resource: interfaces.ResourceBase,
-           max_ref_depth: Optional[int]=None) -> None:
+           max_ref_depth: Optional[int]=None,
+           skip_repeated_refs: bool=False) -> None:
   """Pretty-prints a resource, optionally resolving references."""
-  PPrinter(max_ref_depth=max_ref_depth).pprint(resource)
+  PPrinter(max_ref_depth=max_ref_depth,
+           skip_repeated_refs=skip_repeated_refs).pprint(resource)
 
 
 def pformat(resource: interfaces.ResourceBase,
-            max_ref_depth: Optional[int]=None) -> str:
+            max_ref_depth: Optional[int]=None,
+            skip_repeated_refs: bool=False) -> str:
   """Pretty-prints a resource, optionally resolving references."""
-  return PPrinter(max_ref_depth=max_ref_depth).pformat(resource)
+  return PPrinter(
+    max_ref_depth=max_ref_depth,
+    skip_repeated_refs=skip_repeated_refs).pformat(resource)
