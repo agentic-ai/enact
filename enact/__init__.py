@@ -40,8 +40,9 @@ from enact.invocations import RequestInput
 from enact.invocations import typed_invokable
 from enact.invocations import WrappedException
 
-from enact.pretty_print import PPrinter
+from enact.pretty_print import pformat
 from enact.pretty_print import pprint
+from enact.pretty_print import PPrinter
 from enact.pretty_print import PPValue
 
 from enact.references import commit
