@@ -14,8 +14,6 @@
 
 """Top-level definitions."""
 
-from enact.chains import InvocationChain
-
 from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
