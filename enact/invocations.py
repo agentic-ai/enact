@@ -433,7 +433,8 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
 
     if input_type and not isinstance(arg, input_type):
       raise InvokableTypeError(
-        f'Input type {type(arg)} does not match {input_type}.')
+        f'Input type {type(arg).__qualname__} does not match '
+        f'{input_type.__qualname__}.')
 
     parent: Optional[Builder] = Builder.get_current()
 
