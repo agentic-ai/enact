@@ -72,7 +72,7 @@ class InputRequest(ExceptionResource):
       invokable: references.Ref['InvokableBase'],
       input: references.Ref,
       requested_output: Type[interfaces.ResourceBase],
-      context: Optional[references.Ref]):
+      context: interfaces.FieldValue):
     if not references.Store.get_current():
       raise contexts.NoActiveContext(
         'InputRequired must be created within a Store context.')
@@ -95,7 +95,7 @@ class InputRequest(ExceptionResource):
     return self.args[2]
 
   @property
-  def context(self) -> Optional[references.Ref]:
+  def context(self) -> interfaces.FieldValue:
     return self.args[3]
 
   def continue_invocation(
@@ -139,13 +139,13 @@ class RequestedTypeUndetermined(InvocationError):
 
 def request_input(
     requested_type: Optional[Type[interfaces.ResourceBase]]=None,
-    context: Optional[interfaces.ResourceBase]=None):
+    context: interfaces.FieldValue=None):
   """Requests an input from a user or external system.
 
   Args:
     requested_type: The type of input requested. If not specified, the type will
       be inferred to be the output type of the current invocation.
-    context: Any resource that provides context for the request.
+    context: Anything that provides context for the request.
   Raises:
     InputRequest: The input request exception.
     InputRequestOutsideInvocation: If the request was made outside an invocation.
@@ -161,7 +161,7 @@ def request_input(
     references.commit(builder.invokable),
     builder.input_ref,
     requested_type,
-    references.commit(context) if context else None)
+    context)
 
 
 @resource_registry.register
@@ -377,7 +377,8 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
           self.invokable, input_resource)
         if references.commit(input_resource) != self.input_ref:
           raise InputChanged(
-            'Input changed during invocation. Only the invokable may change.')
+            f'Input changed during invocation of {self.invokable} on input '
+            f'{input_resource}. Only the invokable may change.')
         if output_resource is None:
           output_resource = interfaces.NoneResource()
         output = references.commit(output_resource)
@@ -437,7 +438,8 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
         arg = input_type(*args, **kwargs)
       else:
         raise InvokableTypeError(
-          'Untyped invokables must be called with a single resource argument.')
+          f'Untyped invokables must be called with a single resource argument, '
+          f'got args={args} and kwargs={kwargs}.')
     else:
       arg = args[0]
 
@@ -532,7 +534,7 @@ def typed_invokable(
 class RequestInput(Invokable):
   """An invokable that raises an InputRequest."""
   requested_type: Type[interfaces.ResourceBase]
-  context: Optional[interfaces.ResourceBase] = None
+  context: Optional[interfaces.FieldValue] = None
 
   def call(self, resource: interfaces.ResourceBase) -> interfaces.ResourceBase:
     request_input(self.requested_type, self.context)
