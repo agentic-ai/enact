@@ -61,6 +61,8 @@ class PPrinter:
     """Converts a primitive to a string."""
     if isinstance(v, bytes):
       return f'<{len(v)} bytes>'
+    if isinstance(v, str):
+      return repr(v)
     return str(v)
 
   def from_sequence(self, v: interfaces.FieldValue, depth: int) -> PPValue:
@@ -145,7 +147,7 @@ class PPrinter:
     print(self.pformat(v))
 
 
-def pprint(resource: interfaces.ResourceBase,
+def pprint(resource: interfaces.FieldValue,
            max_ref_depth: Optional[int]=None,
            skip_repeated_refs: bool=False) -> None:
   """Pretty-prints a resource, optionally resolving references."""
@@ -153,7 +155,7 @@ def pprint(resource: interfaces.ResourceBase,
            skip_repeated_refs=skip_repeated_refs).pprint(resource)
 
 
-def pformat(resource: interfaces.ResourceBase,
+def pformat(resource: interfaces.FieldValue,
             max_ref_depth: Optional[int]=None,
             skip_repeated_refs: bool=False) -> str:
   """Pretty-prints a resource, optionally resolving references."""
