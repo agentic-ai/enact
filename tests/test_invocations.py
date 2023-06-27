@@ -421,5 +421,18 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(enact.commit(enact.Str('foo')))
       raised = invocation.get_raised()
       assert isinstance(raised, enact.InputRequest)
-      assert raised.context and raised.context() == 'Context'
+      assert raised.context == 'Context'
       self.assertEqual(raised.requested_type, enact.Str)
+
+  def test_empty_call_args(self):
+    """Tests that empty call args are ok for NoneResource inputs."""
+    @enact.typed_invokable(enact.NoneResource, Str)
+    class TextInput(enact.Invokable):
+      def call(self):
+        return enact.Str('Foo')
+
+    with self.store:
+      fun = TextInput()
+      invocation = fun.invoke()
+      self.assertEqual(invocation.get_output(), 'Foo')
+
