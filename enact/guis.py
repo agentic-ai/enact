@@ -218,7 +218,7 @@ class StrWidget(ResourceWidget):
     return resource_types.Str(component_values[0])
 
 
-class JsonWidget(ResourceWidget):
+class JsonFieldWidget(ResourceWidget):
   """Default widget to read / display a resource using JSON field input."""
 
   def __init__(self, resource_type: Type[interfaces.ResourceBase], **kwargs):
@@ -241,7 +241,7 @@ class JsonWidget(ResourceWidget):
   def create(
       cls,
       resource_type: Type[interfaces.ResourceBase],
-      **kwargs) -> 'JsonWidget':
+      **kwargs) -> 'JsonFieldWidget':
     """Creates a new instance of the widget."""
     return cls(resource_type, **kwargs)
 
@@ -294,8 +294,12 @@ class GUI:
         input required exception.
     """
     self._invokable = invokable
-    self._input_reqired_inputs = input_required_inputs or []
-    self._input_required_outputs = input_required_outputs or []
+    self._input_required_inputs = input_required_inputs or [
+      resource_types.Str
+    ]
+    self._input_required_outputs = input_required_outputs or [
+      resource_types.Str
+    ]
 
     input_type = self._invokable.get().get_input_type()
     if not input_type:
@@ -317,7 +321,7 @@ class GUI:
       Type[interfaces.ResourceBase], ResourceWidget] = {}
 
     self._widget_types: List[Type[ResourceWidget]] = []
-    self.register(JsonWidget)
+    self.register(JsonFieldWidget)
     self.register(RefWidget)
     self.register(StrWidget)
     self.register(ImageWidget)
@@ -395,7 +399,7 @@ class GUI:
       else:
         widget.consume_args(component_values)
 
-    if not user_input:
+    if user_input is None:
       return None
     continued = raised.continue_invocation(invocation, user_input)
     return references.commit(continued)
@@ -438,7 +442,7 @@ class GUI:
             self._create_widget_by_resource_type(
               resource_type, interactive=False, visible=False))
         input_required_input_md = gr.Markdown(visible=False)
-        for resource_type in self._input_reqired_inputs:
+        for resource_type in self._input_required_inputs:
           # Create widgets to sample input from the user for InputRequired exceptions.
           self._input_required_input_widgets[resource_type] = (
             self._create_widget_by_resource_type(
@@ -549,21 +553,22 @@ class GUI:
 
         # If we found a way to display the output, use it, otherwise just dump
         # the exception as text.
-        if found_input_from_user_widget:
-          md_value = f'Provide input below for {exception.invokable()}:'
-        else:
+        md_value = ''
+        if not found_input_from_user_widget:
           md_value = (
             f'User input requested, but no widget found for '
-            f'{exception.requested_type}.')
+            f'{exception.requested_type}')
         if exception.context:
-          md_value += f'\n\n*Context:*\n\n{pretty_print.pformat(exception.context())}'
+          md_value += f'\n\n*Context:*\n\n{pretty_print.pformat(exception.context)}'
+        if not md_value:
+          md_value = 'Provide input below.'
 
         updates_prefix = [
           exception_group.update(visible=not found_output_to_user_widget),
           exception_area.update(value='' if found_output_to_user_widget else str(exception)),
           output_group.update(visible=False),
           input_required_header_md.update(
-            value='Input requested for the following resource: ',
+            value='### User input interrupt',
             visible=True),
           input_required_input_md.update(value=md_value, visible=True),
           continue_button.update(visible=found_input_from_user_widget)]
