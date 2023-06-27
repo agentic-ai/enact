@@ -15,9 +15,12 @@
 import abc
 import contextlib
 import dataclasses
+import inspect
 import time
 import traceback
 from typing import Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
+
+
 from enact import contexts
 from enact import interfaces
 from enact import references
@@ -263,14 +266,21 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     """If there is a replay active, try to use it."""
     context: Optional[ReplayContext[I_contra, O_co]] = (
       ReplayContext.get_current())
+    call = invokable.call
+
+    if (isinstance(arg, interfaces.NoneResource) and
+        len(inspect.signature(invokable.call).parameters) == 0):
+      # Allow invokables that take no call args if they accept NoneResources.
+      call = lambda _: invokable.call()  # type: ignore
+
     if context:
       replayed_output, child_ctx = context._consume_replay(invokable, arg)
-      if replayed_output:
+      if replayed_output is not None:
         return replayed_output
       else:
         with child_ctx:
-          return invokable.call(arg)
-    return invokable.call(arg)
+          return call(arg)
+    return call(arg)
 
   def _consume_replay(
       self,
