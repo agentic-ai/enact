@@ -249,6 +249,10 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
       exception_override=exception_override)
 
 
+class ReplayError(InvocationError):
+  """An error during replay."""
+
+
 @contexts.register
 class ReplayContext(Generic[I_contra, O_co], contexts.Context):
   """A replay of an invocation."""
@@ -256,9 +260,24 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
   def __init__(
       self,
       subinvocations: Iterable[Invocation[I_contra, O_co]],
-      exception_override: ExceptionOverride=lambda x: None):
+      exception_override: ExceptionOverride=lambda x: None,
+      strict: bool = True):
+    """Create a new replay context.
+
+    Args:
+      subinvocations: The subinvocations to replay.
+      exception_override: A function that may override exceptions that occur
+        during replay. If an exception is not overriden, the invokable will
+        be retried.
+      strict: If true, an error will be raised when attempting to replay a
+        subinvocation, but the provided subinvocation does not match the
+        invokable and input. If false, a non-matching sub-invocation will
+        be ignored and the corresponding invokable will be retried on its
+        actual input.
+    """
     self._exception_override = exception_override
     self._available_children = list(subinvocations)
+    self._strict = strict
 
   @classmethod
   def call_or_replay(
@@ -291,6 +310,10 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       if (child.request().invokable == references.commit(invokable) and
           child.request().input == references.commit(input)):
         break
+      elif self._strict:
+        raise ReplayError(
+          f'Expected invocation {invokable}({input}) but got '
+          f'{child.request().invokable()}({child.request().input()})')
     else:
       # No matching replay found.
       return None, ReplayContext([], self._exception_override)
@@ -304,7 +327,8 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       invokable.set_from(response.invokable())
       return response.output(), ReplayContext(
         list(child.get_children()),
-        self._exception_override)
+        self._exception_override,
+        self._strict)
 
     # Check for exception override
     if response.raised and response.raised_here:
@@ -321,11 +345,13 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
         invokable.set_from(response.invokable())
         return (
           cast(O_co, override),
-          ReplayContext(child.get_children(), self._exception_override))
+          ReplayContext(child.get_children(),
+                        self._exception_override,
+                        self._strict))
 
     # Trigger reexecution of the invocation.
     return None, ReplayContext(
-      child.get_children(), self._exception_override)
+      child.get_children(), self._exception_override, self._strict)
 
 
 @contexts.register
@@ -467,14 +493,18 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       arg: Optional[references.Ref[I_contra]]=None,
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
-      raise_on_invocation_error:bool=True) -> Invocation[I_contra, O_co]:
+      raise_on_invocation_error:bool=True,
+      strict_replay: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 
     Args:
       arg: The input resource.
       replay_from: An optional invocation to replay form.
-      exception_override: If replaying, an optional override for replayed exceptions.
+      exception_override: If replaying, an optional override for replayed
+        exceptions.
       raise_on_invocation_error: Whether invocation errors should be reraised.
+      strict_replay: Whether replay should fail if the replayed invocation
+        does not match the current invocation.
     Returns:
       The invocation generated.
     """
@@ -488,7 +518,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     if replay_from:
       exit_stack.enter_context(ReplayContext.top_level())
       exit_stack.enter_context(ReplayContext(
-        [replay_from], exception_override))
+        [replay_from], exception_override, strict_replay))
 
     with exit_stack:
       builder = Builder(self, arg)
