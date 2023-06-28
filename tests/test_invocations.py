@@ -342,16 +342,30 @@ class InvocationsTest(unittest.TestCase):
         result = fun(Int(v=0))
       self.assertEqual(result.v, 106)
 
-  def test_replay_call_on_mismatch(self):
-    """Test replays are ignored if arguments don't match."""
+  def test_replay_call_on_mismatch_nonstrict(self):
+    """Test non-strict replays are ignored if arguments don't match."""
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
         enact.commit(Int(v=0)))
       with enact.ReplayContext(
           subinvocations=[invocation],
-          exception_override=lambda x: Int(v=100)):
+          exception_override=lambda x: Int(v=100), strict=False):
         with self.assertRaises(ValueError):
+          # Exception override is not active since we're ignoring the
+          # replay.
+          fun(Int(v=1))
+
+  def test_replay_call_on_mismatch_strict(self):
+    """Test strict replays raise."""
+    fun = NestedFunction(fail_on=3)
+    with self.store:
+      invocation = fun.invoke(
+        enact.commit(Int(v=0)))
+      with enact.ReplayContext(
+          subinvocations=[invocation],
+          exception_override=lambda x: Int(v=100), strict=True):
+        with self.assertRaises(enact.ReplayError):
           fun(Int(v=1))
 
   def test_invoke_with_replay(self):

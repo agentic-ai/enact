@@ -31,6 +31,7 @@ from enact.invocations import InvokableBase
 from enact.invocations import InvokableBase
 from enact.invocations import Invocation
 from enact.invocations import ReplayContext
+from enact.invocations import ReplayError
 from enact.invocations import Request
 from enact.invocations import Response
 from enact.invocations import request_input
