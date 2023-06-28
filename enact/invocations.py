@@ -101,7 +101,8 @@ class InputRequest(ExceptionResource):
   def continue_invocation(
       self,
       invocation: 'Invocation[I_contra, O_co]',
-      value: interfaces.ResourceBase) -> (
+      value: interfaces.ResourceBase,
+      strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replays the invocation with the given value."""
     ref = references.commit(self)
@@ -109,7 +110,8 @@ class InputRequest(ExceptionResource):
       if exception_ref == ref:
         return value
       return None
-    return invocation.replay(exception_override=_exception_override)
+    return invocation.replay(
+      exception_override=_exception_override, strict=strict)
 
 
 @resource_registry.register
@@ -240,13 +242,15 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
 
   def replay(
       self,
-      exception_override: ExceptionOverride=lambda x: None) -> (
+      exception_override: ExceptionOverride=lambda x: None,
+      strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replay the invocation, retrying exceptions or overiding them."""
     return self.request().invokable().invoke(
       self.request().input,
       replay_from=self,
-      exception_override=exception_override)
+      exception_override=exception_override,
+      strict=strict)
 
 
 class ReplayError(InvocationError):
@@ -313,7 +317,9 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       elif self._strict:
         raise ReplayError(
           f'Expected invocation {invokable}({input}) but got '
-          f'{child.request().invokable()}({child.request().input()})')
+          f'{child.request().invokable()}({child.request().input()}).\n'
+          f'Ensure that all non-deterministic functions are wrapped in '
+          f'invokables or use strict=False.')
     else:
       # No matching replay found.
       return None, ReplayContext([], self._exception_override)
@@ -494,7 +500,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
       raise_on_invocation_error:bool=True,
-      strict_replay: bool=True) -> Invocation[I_contra, O_co]:
+      strict: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 
     Args:
@@ -503,7 +509,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       exception_override: If replaying, an optional override for replayed
         exceptions.
       raise_on_invocation_error: Whether invocation errors should be reraised.
-      strict_replay: Whether replay should fail if the replayed invocation
+      strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
     Returns:
       The invocation generated.
@@ -518,7 +524,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     if replay_from:
       exit_stack.enter_context(ReplayContext.top_level())
       exit_stack.enter_context(ReplayContext(
-        [replay_from], exception_override, strict_replay))
+        [replay_from], exception_override, strict))
 
     with exit_stack:
       builder = Builder(self, arg)
