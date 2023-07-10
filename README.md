@@ -60,9 +60,9 @@ maintainability. However, in generative software, individual components produce
 distributions that may be more or less well-fitted to the system's overall goal,
 for example:
 
-* Two ML models that perform an API-identical transformation from an input text
-prompt to an output image may be differently suited towards particular styles or
-subjects.
+* A foundation text-to-image ML model may perform well on a wide range of
+prompts, whereas an API-identical fine-tuned version may be less general but
+produce better results for images in a particular style.
 * An instruction-tuned LLM and an LLM trained as a chatbot both autoregressively
 extend token sequences, but one will tend to be better suited towards data
 processing applications, while the other will make a better math tutor.
