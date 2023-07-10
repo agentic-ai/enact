@@ -42,7 +42,7 @@ drift off into behavioral loops.
 images.
 
 System correctness is no longer merely a question of specific inputs leading
-to correct outputs, but of the distribution of outputs satisfying some
+to correct outputs, but of the _distribution of outputs_ satisfying some
 quality target when the system is deployed.
 
 In cases where generativity is localized, e.g., when the software is a thin
