@@ -1,11 +1,12 @@
 [project]
 name = "enact"
-version = "0.0.1"
+version = "0.4.0.dev0"
 dependencies = [
   "gradio",
   "numpy",
   "Pillow",
 ]
+description = "A framework for generative software."
 
 [tool.setuptools.packages.find]
 include = ["enact*"]
