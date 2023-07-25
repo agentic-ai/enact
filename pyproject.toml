@@ -7,7 +7,14 @@ dependencies = [
   "Pillow",
 ]
 description = "A framework for generative software."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
 
-[tool.setuptools.packages.find]
-include = ["enact*"]
-exclude = ["tests*", "tutorials*", "examples*"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
