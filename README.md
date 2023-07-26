@@ -1,27 +1,139 @@
 # enact - A Framework for Generative Software.
 
-## Introduction
+Enact is a python framework for building generative software that calls into
+generative machine learning models or APIs. The enact framework makes it easy
+to:
+* serialize and persist data, programs and program executions,
+* programmatically reflect on program executions and human feedback,
+* automatically generate UIs for complex generative flows which
+  alternate human and AI-driven steps,
+* explore the tree of possible system executions,
+* sample human input in a way that is API identical to calling
+  a generative AI component,
+* write higher-order generative flows, e.g., generative AI components that
+  produce or modulate other generative AI components.
 
-TODO: Intro, core features.
+See [here](#why-enact) for an explanation of the significance of these features
+in the context of generative software.
+
+
+## Installation and Quick start
+
+Enact is available as a [pypi package](https://pypi.org/project/enact/) and can
+be installed via:
+
+```bash
+pip install enact
+```
+
+### Defining and storing custom resources
+The atomic unit of enact is the `Resource`, a data-carrying object that can be
+serialized (e.g., as JSON) and is addressable via a unique hash. Resources are
+implemented as python dataclasses and need to be registered with enact to allow
+for deserialization:
+
+```python
+import enact
+import dataclasses
+
+@enact.register
+@dataclasses.dataclass
+class MyResource(enact.Resource):
+  x: int
+  y: float
+```
+
+Resources can be committed to a store, which will return a reference. References
+store the hash of the committed resource as a unique identifier.
+
+```python
+with enact.Store() as store:
+  ref = enact.commit(MyResource(42, 69.0))
+  print(ref.id)  # Prints hash digest of the resource.
+  print(ref.get())  # Prints "MyResource(x=42, y=69.0)".
+```
+
+### Invoking resources
+While some resources represent data, others represent executable code. These
+resources, called invokables, define a call function and may be annotated
+with typing information to allow for advanced features such as automatic
+generation of UIs:
+
+```python
+@enact.typed_invokable(input_type=enact.NoneResource, output_type=MyResource)
+class MyInvokable(enact.Invokable):
+
+  def call(self):
+    return MyResource(42, 69.0)
+```
+
+Invokables can either be called directly, or they can be invoked, in which
+case a full call-graph of the execution is returned in the form of a special
+`Invocation` resource. An invocation references inputs, outputs and any
+recursive subinvocations.
+
+```python
+with store:
+  my_invokable = MyInvokable()
+  # Simple execution:
+  print(my_invokable())  # Prints "MyResource(x=42, y=69.0)".
+  # Tracked execution:
+  invocation = my_invokable.invoke()
+  print(invocation.request().invokable())  # Prints "MyInvokable()".
+  print(invocation.response().output())    # Prints "MyResource(x=42, y=69.0)".
+```
+
+### Replaying invocations
+Invocations that end in an exception can be continued by replacing the raised
+exception with an injected value. This allows suspending an execution in order
+to collect information from a human user or other data source.
+
+```python
+@enact.typed_invokable(input_type=enact.NoneResource, output_type=MyResource)
+class SampleFromHuman(enact.Invokable):
+
+  def call(self):
+    request_int = enact.RequestInput(enact.Int)
+    request_float = enact.RequestInput(enact.Float)
+    return MyResource(
+      x=request_int(enact.Str('Please provide an x-value for MyResource.')),
+      y=request_float(enact.Str('Please provide a y-value for MyResource.')))
+
+with store:
+  h = SampleFromHuman()
+  # Run until first input request.
+  invocation = h.invoke()
+  # Access InputRequest exception.
+  input_request = invocation.response().raised()
+  print(input_request.input())  # Prints 'Please provide an x-value ...'.
+  # Run until second input request.
+  invocation = input_request.continue_invocation(invocation, enact.Int(42))
+  # Access InputRequest exception.
+  input_request = invocation.response().raised()
+  print(input_request.input())  # Prints 'Please provide a y-value ...'.
+  # Run until completion.
+  invocation = input_request.continue_invocation(invocation, enact.Float(69.0))
+  print(invocation.response().output())  # Prints 'MyResource(x=42, y=69.0)'.
+```
 
 ## Why enact?
 
-With the rise of generative AI models, we are witnessing a significant shift in
-how software systems are conceptualized and built.
+The rise of generative AI models is transforming the software development
+process.
 
-Traditional software relies on functional buildings blocks in which inputs and
-system state directly determine outputs. In contrast, modern AI-powered software
-utilizes generative elements, in which each input is associated with a range of
-possible outputs.
+Traditional software relies primarily on functional buildings blocks in which
+inputs and system state directly determine outputs. In contrast, modern
+AI-powered software utilizes generative elements, in which each input is
+associated with a range of possible outputs.
 
-This seemingly small change - from functions to conditional distributions -
-implies a shift in focus across multiple dimensions of the engineering process,
-summarized in the table below.
+This seemingly small change in emphasis - from functions to conditional
+distributions - implies a shift across multiple dimensions of the engineering
+process, summarized in the table below.
 
 |        |  Traditional  |  Generative  |
 | :----: | :-----------: | :----------: |
 | Building block | Deterministic functions | Conditional distributions |
-| Engineers | Add features, debug errors | Improve output distributions |
+| Engineering | Add features, debug errors | Improve output distributions |
 | Subsystems | Interchangeable | Unique |
 | Code sharing | Frameworks | Components |
 | Executions | Logged for metrics/debugging | Training data |
@@ -126,10 +238,6 @@ generative systems this distinction breaks down: Approaches such as AutoGPT or
 Voyager use generative AI to generate programs (specified in code or plain
 text), which in turn may be interpreted by generative AI systems; prompts for
 chat-based generative AI could equally be considered code or data.
-
-## Installation
-
-## Quick start
 
 ## Usage / Examples
 
