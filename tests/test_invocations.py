@@ -136,8 +136,7 @@ class InvocationsTest(unittest.TestCase):
             output=enact.commit(Str(v='1salt')),
             raised=None,
             raised_here=False,
-            children=[])),
-        timestamp_ns=invocation.timestamp_ns)
+            children=[])))
     self.assertEqual(
       invocation,
       want)
