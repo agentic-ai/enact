@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 enact = {editable = true, path = "."}
+jupyter = "*"
+ipywidgets = "*"
 
 [dev-packages]
 mypy = "*"
