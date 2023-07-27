@@ -1,8 +1,8 @@
 # enact - A Framework for Generative Software.
 
-Enact is a python framework for building generative software that calls into
-generative machine learning models or APIs. The enact framework makes it easy
-to:
+Enact is a python framework for building generative software, that is,
+software that calls into generative machine learning models or APIs.
+The enact framework makes it easy to:
 * serialize and persist data, programs and program executions,
 * programmatically reflect on program executions and human feedback,
 * automatically generate UIs for complex generative flows which
@@ -79,11 +79,23 @@ with store:
   print(my_invokable())  # Prints "MyResource(x=42, y=69.0)".
   # Tracked execution:
   invocation = my_invokable.invoke()
-  print(invocation.request().invokable())  # Prints "MyInvokable()".
-  print(invocation.response().output())    # Prints "MyResource(x=42, y=69.0)".
+  enact.pprint(invocation)  # Prints call graph of execution.
 ```
 
-### Replaying invocations
+### Creating UIs
+
+Since invokables carry type annotations, enact can auto-generate a UI.
+
+```python
+with store:
+  ref = enact.commit(my_invokable)
+  enact.GUI(ref).launch(share=True)
+```
+
+This will open a Gradio UI with a run button that can be used to invoke the
+resource.
+
+### Requesting inputs and replaying invocations
 Invocations that end in an exception can be continued by replacing the raised
 exception with an injected value. This allows suspending an execution in order
 to collect information from a human user or other data source.
@@ -114,6 +126,36 @@ with store:
   # Run until completion.
   invocation = input_request.continue_invocation(invocation, enact.Float(69.0))
   print(invocation.response().output())  # Prints 'MyResource(x=42, y=69.0)'.
+```
+
+The `continue_invocation` function makes use of the replay feature, which allows
+replaying a previous invocation while overriding previously encountered
+exceptions with injected inputs:
+
+```python
+with store:
+  # Run until first exception.
+  invocation = h.invoke()
+  def override_exception(exc_ref):
+    if exc_ref().requested_type == enact.Int:
+      return enact.Int(42)
+    if exc_ref().requested_type == enact.Float:
+      return enact.Float(69.0)
+  # Inject first value and run until second exception.
+  invocation = invocation.replay(override_exception)
+  # Inject second value and run until completion.
+  invocation = invocation.replay(override_exception)
+  print(invocation.response().output())  # Prints 'MyResource(x=42, y=69.0)'.
+```
+
+This mechanism also allows UIs to sample inputs from humans. The type of input
+must be preregistered on UI launch:
+
+```python
+with store:
+  ref = enact.commit(h)
+  enact.GUI(ref, input_required_inputs=[enact.Int, enact.Float]).launch(
+    share=True)
 ```
 
 ## Why enact?
@@ -241,9 +283,6 @@ chat-based generative AI could equally be considered code or data.
 
 ## Usage / Examples
 
-## API Reference
-
-## Contributing
-
-
-
+A list of ipython notebook examples, including the code in the quickstart
+section can be found in the
+[examples](https://github.com/agentic-ai/enact/tree/main/examples) directory.
