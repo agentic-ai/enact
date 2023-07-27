@@ -158,15 +158,21 @@ with store:
     share=True)
 ```
 
+## Usage / Examples
+
+A list of ipython notebook examples, including the code in the quickstart
+section can be found in the
+[examples](https://github.com/agentic-ai/enact/tree/main/examples) directory.
+
 ## Why enact?
 
 The rise of generative AI models is transforming the software development
 process.
 
 Traditional software relies primarily on functional buildings blocks in which
-inputs and system state directly determine outputs. In contrast, modern
-AI-powered software utilizes generative elements, in which each input is
-associated with a range of possible outputs.
+inputs and system state directly determine outputs. In contrast, modern software
+increasingly utilizes generative elements, in which each input is associated
+with a range of possible outputs.
 
 This seemingly small change in emphasis - from functions to conditional
 distributions - implies a shift across multiple dimensions of the engineering
@@ -189,22 +195,21 @@ implementing features and debugging errors. In contrast, a generative software
 system may be feature complete and bug-free, but still not suitable for
 deployment. Consider the following examples:
 
-* A search chatbot that is feature complete, but becomes rude and unhelpful.
-* An autonomous agent that recursively accomplishes tasks, but has a tendency to
-drift off into behavioral loops.
-* An AI avatar generator that produces accurate but unattractive portrait
-images.
+* A search chatbot that is sometimes rude and unhelpful
+* An autonomous agent that recursively sets itself goals and accomplishes tasks,
+but has a tendency to drift off into behavioral loops.
+* An AI avatar generator that produces accurate but attractive portrait images.
 
 System correctness is no longer merely a question of specific inputs leading
-to correct outputs, but of the _distribution of outputs_ satisfying some
-quality target when the system is deployed.
+to outputs that are either correct or incorrect, but of the _distribution of
+outputs_ satisfying some quality target.
 
 In cases where generativity is localized, e.g., when the software is a thin
 wrapper around a large language model (LLM) or image generator, machine-learning
 tools and techniques can directly be used to improve the system, but in cases
 where multiple generative-components work together to produce an output, or a
-single generative model is called repeatedly, the system must be fitted as a whole
-to the target distributions.
+single generative model is called repeatedly, the system must be fitted to the
+target distribution as a whole.
 
 ### Generative software requires recursively swapping subsystems
 
@@ -214,19 +219,20 @@ maintainability. However, in generative software, individual components produce
 distributions that may be more or less well-fitted to the system's overall goal,
 for example:
 
-* A foundation text-to-image ML model may perform well on a wide range of
+* A foundation text-to-image model may perform well on a wide range of
 prompts, whereas an API-identical fine-tuned version may be less general but
 produce better results for images in a particular style.
 * An instruction-tuned LLM and an LLM trained as a chatbot both autoregressively
 extend token sequences, but one will tend to be better suited towards data
 processing applications, while the other will make a better math tutor.
 
-Generative system outputs are fitted distributions, and their target is only
-implicitly specified. Data selection, training parameters, model composition,
-sampling of feedback and self-improvement flows produce systems whose
-conditional output distributions represent a unique, opinionated take on the
-problem they were trained to solve. Therefore the development of generative
-systems involves recursively swapping out and comparing subsystems.
+Generative system outputs are distributions that optimized towards some - often
+implicitly specified - target. Data selection, training parameters, model
+composition, sampling of feedback and self-improvement flows produce systems
+whose conditional output distributions represent a unique, opinionated take on
+the problem they were trained to solve. Therefore the development of generative
+systems motivates ongoing reevaluation, tuning and replacement of subsystems,
+more so than in traditional engineering applications.
 
 ### Generative software should be shareable
 
@@ -281,8 +287,3 @@ Voyager use generative AI to generate programs (specified in code or plain
 text), which in turn may be interpreted by generative AI systems; prompts for
 chat-based generative AI could equally be considered code or data.
 
-## Usage / Examples
-
-A list of ipython notebook examples, including the code in the quickstart
-section can be found in the
-[examples](https://github.com/agentic-ai/enact/tree/main/examples) directory.
