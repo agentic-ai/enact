@@ -9,6 +9,9 @@
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
     "python.linting.enabled": true,
+    "python.linting.pylintArgs": [
+        "--indent-string=\"  \""
+    ],
     "python.linting.mypyArgs": [
         "--check-untyped-defs"
     ],
