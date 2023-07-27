@@ -65,7 +65,7 @@ O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
 @resource_registry.register
 class InputRequest(ExceptionResource):
-  """An exception indicating that external input is required.."""
+  """An exception indicating that external input is required."""
 
   def __init__(
       self,
