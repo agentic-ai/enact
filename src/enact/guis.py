@@ -629,6 +629,18 @@ class GUI:
 
       return blocks
 
-  def launch(self, *args, **kwargs) -> Tuple[Any, str, str]:
-      """Launch the gradio UI, passing arguments to Blocks.launch."""
-      return self.blocks.launch(*args, **kwargs)
+  def launch(self, *args, use_queue: bool=True, **kwargs) -> (
+      Tuple[Any, str, Optional[str]]):
+    """Launch the gradio UI, passing arguments to Blocks.launch.
+      
+    Args:
+      use_queue: Specify whether queue should be used. The queue is required
+        for executions exceeding 60 seconds.
+        
+    Returns:
+      Tuple containing the FastAPI app object running the demo, local URL, and
+      optional public URL if called with share=True.
+    """
+    if use_queue:
+      return self.blocks.queue().launch(*args, **kwargs)
+    return self.blocks.launch(*args, **kwargs)
