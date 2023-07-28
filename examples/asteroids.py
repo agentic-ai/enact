@@ -286,7 +286,6 @@ def measure_policy(
 def plot_trajectory(
     trajectory: Tuple[State, Action],
     axis: Optional[plt.Axes]=None,
-    index: Tuple[int, ...]=(0,),
     marker: Optional[str]=None) -> plt.Axes:
   """Plot one of a batch of trajectories.
 
@@ -304,21 +303,21 @@ def plot_trajectory(
     _, axis = plt.subplots(1, 1)
 
   states, _ = trajectory
-  x_pos = states.array[index][..., 0]
-  y_pos = states.array[index][..., 1]
+  x_pos = states.array[..., 0]
+  y_pos = states.array[..., 1]
   axis.set_aspect(1)
   axis.plot(x_pos, y_pos, marker=marker)
   axis.set_xlim([-10, State.BOARD_SIZE + 10])
   axis.set_ylim([-10, State.BOARD_SIZE + 10])
 
   axis.add_artist(plt.Circle(
-      states.goal_position[index][0],
+      states.goal_position[0],
       1, color='orange'))
   axis.add_artist(plt.Circle(
-    states.position[index][0], 0.5))
+    states.position[0], 0.5))
 
-  start_pos = states.position[index][0]
-  fwd = states.forward()[index][0]
+  start_pos = states.position[0]
+  fwd = states.forward()[0]
   axis.add_artist(plt.Line2D([start_pos[0], start_pos[0] + 2 * fwd[0]],
                              [start_pos[1], start_pos[1] + 2 * fwd[1]],
                              color='purple'))
