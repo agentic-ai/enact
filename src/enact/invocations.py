@@ -138,12 +138,14 @@ class RequestedTypeUndetermined(InvocationError):
   """Raised when the requested type cannot be determined."""
 
 
-def request_input(
-    requested_type: Optional[Type[interfaces.ResourceBase]]=None,
+def _request_input(
+    for_resource: Optional[interfaces.ResourceBase],
+    requested_type: Optional[Type[interfaces.ResourceBase]],
     context: interfaces.FieldValue=None):
   """Requests an input from a user or external system.
 
   Args:
+    for_resource: The resource for which input is requested.
     requested_type: The type of input requested. If not specified, the type will
       be inferred to be the output type of the current invocation.
     context: Anything that provides context for the request.
@@ -160,7 +162,7 @@ def request_input(
       'Requested type must be specified when output type is undetermined.')
   raise InputRequest(
     references.commit(builder.invokable),
-    builder.input_ref,
+    references.commit(for_resource),
     requested_type,
     context)
 
@@ -566,5 +568,27 @@ class RequestInput(Invokable):
   context: Optional[interfaces.FieldValue] = None
 
   def call(self, resource: interfaces.ResourceBase) -> interfaces.ResourceBase:
-    request_input(self.requested_type, self.context)
+    _request_input(resource, self.requested_type, self.context)
     assert False
+
+def request_input(
+    requested_type: Type[C],
+    for_resource: Optional[interfaces.ResourceBase]=None,
+    context: Optional[interfaces.FieldValue]=None) -> C:
+  """Request an input from an external system / user.
+
+  Args:
+    requested_type: The type of input to request.
+    for_resource: The resource to request input for. If unset, defaults to None.
+    context: An optional context to provide to the input request, e.g., instructions
+      to a user.
+  Returns:
+    The requested input. Note that this function will not return a value
+    during normal execution, but will raise an InputRequest exception,
+    which can be used to resume the execution with an injected value.
+  Raises:
+    InputRequest: Raised to halt execution in order to await input.
+  """
+  if for_resource is None:
+    for_resource = interfaces.NoneResource()
+  return RequestInput(requested_type, context)(for_resource)

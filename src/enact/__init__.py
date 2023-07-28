@@ -34,8 +34,8 @@ from enact.invocations import ReplayContext
 from enact.invocations import ReplayError
 from enact.invocations import Request
 from enact.invocations import Response
-from enact.invocations import request_input
 from enact.invocations import RequestInput
+from enact.invocations import request_input
 from enact.invocations import typed_invokable
 from enact.invocations import WrappedException
 
