@@ -138,9 +138,10 @@ class StoreTest(unittest.TestCase):
     ref = store.commit(resource)
     old_digest = ref.digest
 
-    with ref.modify() as resource:
-      resource.x = 10
-    self.assertEqual(ref.get().x, 10)
+    with store:
+      with ref.modify() as resource:
+        resource.x = 10
+      self.assertEqual(ref.get().x, 10)
     self.assertNotEqual(ref.digest, old_digest)
 
   def test_pack_none(self):
