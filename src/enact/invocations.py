@@ -408,7 +408,11 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
             f'{input_resource}. Only the invokable may change.')
         if output_resource is None:
           output_resource = interfaces.NoneResource()
-        output = references.commit(output_resource)
+        if not isinstance(output_resource, interfaces.ResourceBase):
+          raise InvokableTypeError(
+            f'Invokable {self.invokable} returned {output_resource} '
+            f'which is not a resource.')
+        output = cast(references.Ref[O_co], references.commit(output_resource))
       except ExceptionResource as e:
         python_exc = e
         exception = references.commit(e)
@@ -431,7 +435,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
           references.commit(response))
         if parent:
           parent.record_child(self._invocation)
-      return output_resource
+      return cast(O_co, output_resource)
 
 
 class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
