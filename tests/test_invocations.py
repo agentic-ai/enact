@@ -146,6 +146,15 @@ class InvocationsTest(unittest.TestCase):
         output = child.get_output()
         self.assertEqual(output, i + 2)
 
+  def test_invoke_output_error(self):
+    """Test that error is raised if a non-resource object is returned."""
+    class BadInvokable(enact.Invokable):
+      def call(self, input: enact.Int) -> int:
+        return 1
+    with self.store:
+      with self.assertRaises(TypeError):
+        BadInvokable().invoke(enact.commit(enact.Int(1)))
+
   def test_invoke_fail(self):
     with self.store:
       invocation = NestedFunction(fail_on=3).invoke(
