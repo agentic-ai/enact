@@ -64,6 +64,10 @@ from enact.resource_types import Str
 from enact.resource_types import Bytes
 from enact.resource_types import NPArray
 
+from enact.serialization import Serializer
+from enact.serialization import JsonSerializer
+from enact.serialization import SerializationError
+from enact.serialization import DeserializationError
 
 from enact.guis import GUI
 
