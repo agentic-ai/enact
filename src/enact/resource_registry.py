@@ -34,7 +34,7 @@ class Registry:
 
   def __init__(self):
     """Initializes a registry."""
-    self.allow_reregistration = False
+    self.allow_reregistration = True
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
 
   def register(self, resource: Type[interfaces.ResourceBase]):
