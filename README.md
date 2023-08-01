@@ -1,21 +1,20 @@
 # enact - A Framework for Generative Software.
 
-Enact is a python framework for building generative software, that is,
-software that calls into generative machine learning models or APIs.
-The enact framework makes it easy to:
-* serialize and persist data, programs and program executions,
-* programmatically reflect on program executions and human feedback,
-* automatically generate UIs for complex generative flows which
+Enact is a python framework for building generative software, specifically
+software that integrates with machine learning models or APIs that
+generate distributions of outputs. It provides support to address common
+challenges that arise in the context of building these systems:
+* storing executions of generative systems in a versioned manner,
+* programmatically reflecting on program executions,
+* replaying executions while resampling selected generative components,
+* flexibly interchanging human input with AI and vice versa,
+* automatically generating UIs for complex generative flows which
   alternate human and AI-driven steps,
-* explore the tree of possible system executions,
-* sample human input in a way that is API identical to calling
-  a generative AI component,
-* write higher-order generative flows, e.g., generative AI components that
+* writing higher-order generative flows, e.g., generative AI components that
   produce or modulate other generative AI components.
 
 See [here](#why-enact) for an explanation of the significance of these features
 in the context of generative software.
-
 
 ## Installation and Quick start
 
@@ -163,6 +162,9 @@ with store:
 A list of ipython notebook examples, including the code in the quickstart
 section can be found in the
 [examples](https://github.com/agentic-ai/enact/tree/main/examples) directory.
+
+A tutorial that explains the basic concepts of the enact framework can be found
+[here](https://github.com/agentic-ai/enact/tree/main/examples/tutorial.ipynb).
 
 ## Why enact?
 
