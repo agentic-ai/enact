@@ -27,18 +27,18 @@ Value = Union[
 
 def type_digest(cls: Type[interfaces.ResourceBase]) -> str:
   """Return a digest of the type of resource."""
-  hash = hashlib.sha256()
-  hash.update(cls.__module__.encode('utf-8'))
-  hash.update(b'.')
-  hash.update(cls.__qualname__.encode('utf-8'))
+  hash_obj = hashlib.sha256()
+  hash_obj.update(cls.__module__.encode('utf-8'))
+  hash_obj.update(b'.')
+  hash_obj.update(cls.__qualname__.encode('utf-8'))
   for field in cls.field_names():
-    hash.update(repr(field).encode('utf-8'))
-  return hash.hexdigest()
+    hash_obj.update(repr(field).encode('utf-8'))
+  return hash_obj.hexdigest()
 
 
 def _digest(
     value: Value,
-    hash: Any,
+    hash_obj: Any,
     stack: List[int]):
   """Recursively compute digest over a field value.
 
@@ -59,48 +59,48 @@ def _digest(
       assert isinstance(value, interfaces.ResourceDict)
       res_type = value.type
       items = value.items()
-    hash.update(b'res[')
-    hash.update(res_type.type_id().encode('utf-8'))
+    hash_obj.update(b'res[')
+    hash_obj.update(res_type.type_id().encode('utf-8'))
     for k, v in items:
-      hash.update(repr(k).encode('utf-8'))
-      _digest(v, hash, stack)
-    hash.update(b']')
+      hash_obj.update(repr(k).encode('utf-8'))
+      _digest(v, hash_obj, stack)
+    hash_obj.update(b']')
   elif isinstance(value, int):
-    hash.update(b'i')
-    hash.update(repr(int(value)).encode('utf-8'))
+    hash_obj.update(b'i')
+    hash_obj.update(repr(int(value)).encode('utf-8'))
   elif isinstance(value, float):
-    hash.update(b'f')
-    hash.update(repr(value).encode('utf-8'))
+    hash_obj.update(b'f')
+    hash_obj.update(repr(value).encode('utf-8'))
   elif isinstance(value, str):
-    hash.update(b's')
-    hash.update(repr(value).encode('utf-8'))
+    hash_obj.update(b's')
+    hash_obj.update(repr(value).encode('utf-8'))
   elif isinstance(value, bytes):
-    hash.update(b'b')
-    hash.update(value)
+    hash_obj.update(b'b')
+    hash_obj.update(value)
   elif value is True:
-    hash.update(b'1')
+    hash_obj.update(b'1')
   elif value is False:
-    hash.update(b'0')
+    hash_obj.update(b'0')
   elif value is None:
-    hash.update(b'n')
+    hash_obj.update(b'n')
   elif isinstance(value, Sequence):
-    hash.update(b'seq[')
+    hash_obj.update(b'seq[')
     for item in value:
-      _digest(item, hash, stack)
-    hash.update(b']')
+      _digest(item, hash_obj, stack)
+    hash_obj.update(b']')
   elif isinstance(value, Mapping):
-    hash.update(b'map[')
+    hash_obj.update(b'map[')
     for k, v in value.items():
       if not isinstance(k, str):
         raise interfaces.FieldTypeError('Map keys must be strings')
-      hash.update(repr(k).encode('utf-8'))
-      _digest(v, hash, stack)
-    hash.update(b']')
+      hash_obj.update(repr(k).encode('utf-8'))
+      _digest(v, hash_obj, stack)
+    hash_obj.update(b']')
   elif issubclass(value, interfaces.ResourceBase):
     # Type of resource.
-    hash.update(b'type[')
-    hash.update(value.type_id().encode('utf-8'))
-    hash.update(b']')
+    hash_obj.update(b'type[')
+    hash_obj.update(value.type_id().encode('utf-8'))
+    hash_obj.update(b']')
   else:
     raise interfaces.FieldTypeError(
       f'Got unexpected field type: {type(value)}. '
@@ -112,6 +112,6 @@ def _digest(
 def digest(resource: Union[interfaces.ResourceDict,
                            interfaces.ResourceBase]) -> str:
   """Compute a digest of a resource or a dict representation."""
-  hash = hashlib.sha256()
-  _digest(resource, hash, [])
-  return hash.hexdigest()
+  hash_obj = hashlib.sha256()
+  _digest(resource, hash_obj, [])
+  return hash_obj.hexdigest()
