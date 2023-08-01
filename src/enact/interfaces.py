@@ -182,9 +182,9 @@ class ResourceBase:
 class ResourceDict(Generic[C], dict, Mapping[str, ResourceDictValue]):
   """A dictionary representing a resource with attached type info."""
 
-  def __init__(self, type: Type[C], *args, **kwargs):
+  def __init__(self, resource_type: Type[C], *args, **kwargs):
     super().__init__(*args, **kwargs)
-    self.type = type
+    self.type = resource_type
 
   def to_resource(self) -> C:
     """Constructs the resource from the dictionary."""
@@ -206,8 +206,13 @@ class NoneResource(ResourceBase):
   @classmethod
   def from_fields(
       cls: Type[C],
-      field_values: Mapping[str, FieldValue]) -> C:
+      field_dict: Mapping[str, FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
-    assert not field_values
+    assert not field_dict
     return cls()
 
+  def set_from(self: C, other: C):
+    """Sets the fields of this resource from another resource."""
+    raise NotImplementedError(
+      f'Setting fields from another resource is not '
+      f'supported by type {type(self)}.')

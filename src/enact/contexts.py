@@ -25,12 +25,10 @@ _context_vars: Dict[Type['Context'],
 
 class ContextError(Exception):
   """Error raised when there is a problem with the context."""
-  pass
 
 
 class NoActiveContext(ContextError):
   """Raised when there is no active context."""
-  pass
 
 C = TypeVar('C', bound='Context')
 
@@ -47,10 +45,10 @@ class Context:
     """Returns the context var for this type."""
     try:
       return cast(contextvars.ContextVar[Optional[C]], _context_vars[cls])
-    except KeyError:
+    except KeyError as key_error:
       raise ContextError(
         f'Context {cls} not registered. A context class must be registered '
-        f'with the "@register" decorator.')
+        f'with the "@register" decorator.') from key_error
 
   @classmethod
   @contextlib.contextmanager
@@ -69,11 +67,12 @@ class Context:
     context_var = cls._get_context_var()
     try:
       current_context = context_var.get()
-    except LookupError:
+    except LookupError as lookup_error:
       raise ContextError(
         f'Context {cls} not initialized. If running inside a thread, make sure '
         f'to annotate the thread function with either the '
-        f'"@with_current_contexts" or "@with_new_contexts" decorator.')
+        f'"@with_current_contexts" or "@with_new_contexts" decorator.'
+        ) from lookup_error
     return current_context
 
   @classmethod

@@ -94,8 +94,7 @@ class ResourceWidget(abc.ABC):
       if len(updates) == 1:
         # Gradio needs unpacking for singleton lists.
         return updates[0]
-      else:
-        return updates
+      return updates
     return event(
       contexts.with_current_contexts(_set),
       inputs=inputs,
@@ -328,24 +327,29 @@ class GUI:
 
   @property
   def input_widget(self) -> ResourceWidget:
+    """Input widget of GUI."""
     assert self._input_widget, 'Blocks not generated yet.'
     return self._input_widget
 
   @property
   def output_widget(self) -> ResourceWidget:
+    """Output widget of GUI."""
     assert self._output_widget, 'Blocks not generated yet.'
     return self._output_widget
 
   @property
   def invocation_widget(self) -> RefWidget:
+    """Invocation widget of GUI."""
     assert self._invocation_widget, 'Blocks not generated yet.'
     return self._invocation_widget
 
   def register(self, resource_widget: Type[ResourceWidget]):
+    """Register a resource widget."""
     self._widget_types.append(resource_widget)
 
   @property
   def blocks(self) -> gr.Blocks:
+    """Blocks object representing the UI."""
     if not self._blocks:
       self._blocks = self._create_blocks()
     return self._blocks
@@ -412,7 +416,7 @@ class GUI:
     with gr.Blocks() as blocks:
       with gr.Group():
         title = gr.Markdown(value=self._title(self._invokable))
-        with gr.Accordion(label='Resource details', open=False) as details:
+        with gr.Accordion(label='Resource details', open=False):
           invokable_details = gr.Markdown(
             value=f'```{pretty_print.pformat(self._invokable())}```')
 
