@@ -516,6 +516,8 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     if arg is None:
       arg = cast(references.Ref[I_contra],
                  references.commit(interfaces.NoneResource()))
+    if not isinstance(arg, references.Ref):
+      raise InvokableTypeError('Input must be a reference.')
 
     exit_stack = contextlib.ExitStack()
     # Execute in a top-level context to ensure that there are no parents.
