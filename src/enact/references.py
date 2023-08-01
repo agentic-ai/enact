@@ -98,6 +98,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
     """Context manager for modifying the resource."""
     resource = self.get()
     yield resource
+    commit(resource)
     self.set(resource)
 
   def get(self) -> R:
