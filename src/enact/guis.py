@@ -124,7 +124,7 @@ class RefWidget(ResourceWidget):
       except json.JSONDecodeError:
         return self.ref_details.update(value='Invalid reference id.')
       try:
-        resource = ref.get()
+        resource = ref()
       except references.NotFound:
         return self.ref_details.update(value='Reference not found.')
       return self.ref_details.update(
@@ -301,12 +301,12 @@ class GUI:
       resource_types.Str
     ]
 
-    input_type = self._invokable.get().get_input_type()
+    input_type = self._invokable().get_input_type()
     if not input_type:
       raise ValueError('Input type must be specified.')
     self._input_type: Type[interfaces.ResourceBase] = input_type
 
-    output_type = self._invokable.get().get_output_type()
+    output_type = self._invokable().get_output_type()
     if not output_type:
       raise ValueError('Output type must be specified.')
     self._output_type: Type[interfaces.ResourceBase] = output_type
@@ -377,8 +377,8 @@ class GUI:
     invokable = self._invokable
     if last_invocation:
       assert isinstance(last_invocation, references.Ref)
-      invokable = last_invocation.get().response.get().invokable
-    invocation = invokable.get().invoke(references.commit(input_resource))
+      invokable = last_invocation().response.get().invokable
+    invocation = invokable().invoke(references.commit(input_resource))
     return references.commit(invocation)
 
   def _continue(self, *args) -> Optional[references.Ref[invocations.Invocation]]:
@@ -405,7 +405,7 @@ class GUI:
     return references.commit(continued)
 
   def _title(self, ref: references.Ref) -> str:
-    return f'### *{type(ref.get()).__name__}* `{ref.digest[:6]}`'
+    return f'### *{type(ref()).__name__}* `{ref.digest[:6]}`'
 
   def _create_blocks(self) -> gr.Blocks:
     """Return the gradio Blocks object representing the UI."""
@@ -414,7 +414,7 @@ class GUI:
         title = gr.Markdown(value=self._title(self._invokable))
         with gr.Accordion(label='Resource details', open=False) as details:
           invokable_details = gr.Markdown(
-            value=f'```{pretty_print.pformat(self._invokable.get())}```')
+            value=f'```{pretty_print.pformat(self._invokable())}```')
 
       with gr.Group():
         gr.Markdown(value='Input:')
@@ -460,7 +460,7 @@ class GUI:
         if not ref:
           return None
         assert isinstance(ref, references.Ref)
-        invocation = ref.get()
+        invocation = ref()
         assert isinstance(invocation, invocations.Invocation)
         return invocation
 
@@ -632,11 +632,11 @@ class GUI:
   def launch(self, *args, use_queue: bool=True, **kwargs) -> (
       Tuple[Any, str, Optional[str]]):
     """Launch the gradio UI, passing arguments to Blocks.launch.
-      
+
     Args:
       use_queue: Specify whether queue should be used. The queue is required
         for executions exceeding 60 seconds.
-        
+
     Returns:
       Tuple containing the FastAPI app object running the demo, local URL, and
       optional public URL if called with share=True.

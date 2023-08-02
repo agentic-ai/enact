@@ -142,7 +142,7 @@ class InvocationsTest(unittest.TestCase):
       self.assertEqual(output, 11)
       self.assertEqual(len(list(invocation.get_children())), 10)
       for i, child in enumerate(invocation.get_children()):
-        self.assertEqual(child.request.get().input.get(), i + 1)
+        self.assertEqual(child.request().input(), i + 1)
         output = child.get_output()
         self.assertEqual(output, i + 2)
 
@@ -255,7 +255,7 @@ class InvocationsTest(unittest.TestCase):
     class SubCall(enact.Invokable):
       invokable: enact.Ref[enact.InvokableBase]
       def call(self, input: enact.ResourceBase):
-        self.invokable.get()(input)
+        self.invokable.checkout()(input)
 
     with self.store as store:
       error_fun = PythonErrorOnInvoke()
@@ -413,7 +413,7 @@ class InvocationsTest(unittest.TestCase):
         raised = invocation.get_raised()
         assert isinstance(raised, enact.InputRequest)
         self.assertEqual(
-          cast(enact.Str, raised.input.get()), cur_input)
+          cast(enact.Str, raised.input.checkout()), cur_input)
         invocation = raised.continue_invocation(
           invocation, enact.Str(next_input))
       self.assertEqual(invocation.get_output(), 'bish')

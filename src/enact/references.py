@@ -48,7 +48,7 @@ R = TypeVar('R', bound=interfaces.ResourceBase)
 def get(ref: Optional['Ref[R]']) -> R:
   """Gets the reference or asserts false if None."""
   assert ref
-  return ref.get()
+  return ref.checkout()
 
 
 def commit(resource: R) -> 'Ref[R]':
@@ -96,20 +96,20 @@ class Ref(Generic[R], interfaces.ResourceBase):
   @contextlib.contextmanager
   def modify(self) -> Iterator[R]:
     """Context manager for modifying the resource."""
-    resource = self.get()
+    resource = self.checkout()
     yield resource
     commit(resource)
     self.set(resource)
 
-  def get(self) -> R:
+  def checkout(self) -> R:
     """Fetches the resource from the cache or active store."""
     if self._cached is None or self.from_resource(self._cached) != self:
-      self._cached = Store.current().get(self)
+      self._cached = Store.current().checkout(self)
     return self._cached
 
   def __call__(self) -> R:
     """Alias for get."""
-    return self.get()
+    return self.checkout()
 
   def set(self, resource: R):
     """Sets the reference to point to the given resource."""
@@ -126,7 +126,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
     if not isinstance(other, Ref):
       return False
     if type(self) != type(other):
-      other = self.from_resource(other.get())
+      other = self.from_resource(other.checkout())
     return self.digest == other.digest
 
   @classmethod
@@ -193,7 +193,7 @@ class StorageBackend(abc.ABC):
     """Returns whether the storage backend has the resource."""
 
   @abc.abstractmethod
-  def get(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
+  def checkout(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
     """Returns the packed resource or None if not available."""
 
 
@@ -217,7 +217,7 @@ class InMemoryBackend(StorageBackend):
     """Returns whether the backend has the referenced resource."""
     return ref.id in self._resources
 
-  def get(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
+  def checkout(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
     """Returns the packed resource or None if not available."""
     return self._resources.get(ref.id)
 
@@ -248,7 +248,7 @@ class FileBackend(StorageBackend):
     """Returns whether the backend has the referenced resource."""
     return os.path.exists(os.path.join(self._root_dir, ref.id))
 
-  def get(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
+  def checkout(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
     """Returns the packed resource or None if not available."""
     with open(os.path.join(self._root_dir, ref.id), 'rb') as f:
       return self._serializer.deserialize(f.read())
@@ -278,9 +278,9 @@ class Store(contexts.Context):
     """Returns whether the store has a resource."""
     return self._backend.has(ref)
 
-  def get(self, ref: Ref[R]) -> R:
+  def checkout(self, ref: Ref[R]) -> R:
     """Retrieves a resource from the store."""
-    resource_data = self._backend.get(ref)
+    resource_data = self._backend.checkout(ref)
     if resource_data is None:
       raise NotFound(ref.id)
     packed_resource = PackedResource(resource_data, ref=ref)
