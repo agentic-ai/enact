@@ -295,6 +295,33 @@ class InvocationsTest(unittest.TestCase):
         result = fun(enact.Int(0))
       self.assertEqual(result, 106)
 
+  def test_rewind_call(self):
+    """Test rewinding a call."""
+    leaf_calls = 0
+
+    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    class Leaf(enact.Invokable):
+      def call(self):
+        nonlocal leaf_calls
+        leaf_calls += 1
+        return enact.Int(1)
+
+    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    class Nested(enact.Invokable):
+      def call(self):
+        leaf = Leaf()
+        return enact.Int(leaf() + leaf() + leaf())
+
+    fun = Nested()
+    with self.store:
+      invocation = fun.invoke()
+      self.assertEqual(leaf_calls, 3)
+      invocation.replay()
+      self.assertEqual(leaf_calls, 3)
+      invocation = invocation.rewind(2)
+      invocation.replay()
+      self.assertEqual(leaf_calls, 5)
+
   def test_replay_modifies_invokable(self):
     @dataclasses.dataclass
     class Counter(enact.Invokable):

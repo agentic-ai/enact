@@ -230,10 +230,25 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
     return response.raised_here
 
   def get_children(self) -> Iterable['Invocation']:
-    """Yields the child invocations or raises assertion error."""
+    """Yields the child invocations."""
     children = self.response().children
     for child in children:
       yield child()
+
+  def get_child(self, index: int) -> 'Invocation':
+    """Returns the child invocation corresponding to the index."""
+    children = self.response().children
+    return children[index]()
+
+  def rewind(self, num_calls=1) -> 'Invocation[I_contra, O_co]':
+    """Rewinds the invocation by the specified number of calls."""
+    invocation = self.deep_copy_resource()
+    with invocation.response.modify() as response:
+      response.output = None
+      for _ in range(num_calls):
+        if response.children:
+          response.children.pop(-1)
+    return invocation
 
   def replay(
       self,
