@@ -1,22 +1,28 @@
 # enact - A Framework for Generative Software.
 
 Enact is a python framework for building generative software, specifically
-software that integrates with machine learning models or APIs that
-generate distributions of outputs. It provides support to address common
-challenges that arise in the context of building these systems:
-* storing executions of generative systems in a versioned manner,
-* programmatically reflecting on program executions,
-* replaying executions while resampling selected generative components,
-* flexibly interchanging human input with AI and vice versa,
-* automatically generating UIs for complex generative flows which
-  alternate human and AI-driven steps,
-* writing higher-order generative flows, e.g., generative AI components that
-  produce or modulate other generative AI components.
+software that integrates with machine learning models or APIs that generate
+distributions of outputs.
+
+The advent of generative AI is driving changes in the way software is built. The
+design philosophy of enact to address the needs of emerging AI-based systems in
+a fundamental way close to the programming language. Enact is therefore designed
+as a core framework that addresses the needs of emerging AI-based systems and
+can serve as the basis for development of a generative software stack.
+
+To this end, enact provides support for the following features:
+* Persistent, versioned storage of data, generative components and executions.
+* Journaled executions of recursively-nested generative python components.
+* The ability to rewind and replay past executions.
+* Easy interchangeability of human and AI-driven components.
+* Support for all of the above features in higher-level generative flows, i.e.,
+  generative programs that generate and execute generative programs.
 
 See [here](#why-enact) for an explanation of the significance of these features
 in the context of generative software.
 
-## Installation and Quick start
+
+## Installation and overview
 
 Enact is available as a [pypi package](https://pypi.org/project/enact/) and can
 be installed via:
@@ -25,146 +31,95 @@ be installed via:
 pip install enact
 ```
 
-### Defining and storing custom resources
-The atomic unit of enact is the `Resource`, a data-carrying object that can be
-serialized (e.g., as JSON) and is addressable via a unique hash. Resources are
-implemented as python dataclasses and need to be registered with enact to allow
-for deserialization:
+### Building generative flows in enact
+
+Tracking executions requires that generative components as well as their
+inputs and outputs are wrapped in custom-defined enact types.
 
 ```python
 import enact
-import dataclasses
 
-@enact.register
+import dataclasses
+import random
+
+@enact.typed_invokable(
+  input_type=enact.NoneResource,
+  output_type=enact.Int)
 @dataclasses.dataclass
-class MyResource(enact.Resource):
-  x: int
-  y: float
+class RollDie(enact.Invokable):
+  """An enact invokable that rolls a die."""
+  sides: int
+
+  def call(self):
+    return enact.Int(random.randint(1, self.sides))
+
+
+@enact.typed_invokable(
+  input_type=enact.Int,
+  output_type=enact.Int)
+@dataclasses.dataclass
+class RollDice(enact.Invokable):
+  """An enact invokable that rolls a specified number of dice."""
+  roll: enact.Invokable
+  def call(self, num_dice: enact.Int):
+    return enact.Int(sum(self.roll() for _ in range(num_dice)))
+
+roll_dice = RollDice(RollDie(6))
+print(roll_dice(enact.Int(3)))   # Print sum of 3 rolls.
 ```
 
-Resources can be committed to a store, which will return a reference. References
-store the hash of the committed resource as a unique identifier.
+### Journaled execution
+
+Generative flows defined in enact support journaled execution, which allows
+inspection of the execution history.
 
 ```python
 with enact.Store() as store:
-  ref = enact.commit(MyResource(42, 69.0))
-  print(ref.id)  # Prints hash digest of the resource.
-  print(ref.get())  # Prints "MyResource(x=42, y=69.0)".
+  num_rolls = enact.commit(enact.Int(3))  # commit input to store.
+  invocation = roll_dice.invoke(num_rolls)  # create journaled execution.
+  print(invocation.get_output())  # Print sum of 3 rolls
+  for i in range(3):
+    print(invocation.get_child(i).get_output())  # Print each die roll.
 ```
 
-### Invoking resources
-While some resources represent data, others represent executable code. These
-resources, called invokables, define a call function and may be annotated
-with typing information to allow for advanced features such as automatic
-generation of UIs:
+### Rewinding and replaying executions
+
+Journaled executions can be replayed or rewound. The following
+rewinds the journaled execution to reroll only the last die.
 
 ```python
-@enact.typed_invokable(input_type=enact.NoneResource, output_type=MyResource)
-class MyInvokable(enact.Invokable):
+with store:
+  invocation = invocation.rewind().replay()  # Reexecute the last call to RollDie.
+  print(invocation.get_output())
+```
 
+This makes it easy to, e.g., explore the tree of possible executions of a
+component.
+
+### Human in the loop
+
+When human inputs are required, the execution can halt and later resume with
+externally provided data. This makes it easy to swap out generative AI
+components with human-driven input and vice versa.
+
+```python
+@enact.typed_invokable(enact.NoneResource, enact.Int)
+class HumanRollsDie(enact.Invokable):
   def call(self):
-    return MyResource(42, 69.0)
-```
-
-Invokables can either be called directly, or they can be invoked, in which
-case a full call-graph of the execution is returned in the form of a special
-`Invocation` resource. An invocation references inputs, outputs and any
-recursive subinvocations.
-
-```python
-with store:
-  my_invokable = MyInvokable()
-  # Simple execution:
-  print(my_invokable())  # Prints "MyResource(x=42, y=69.0)".
-  # Tracked execution:
-  invocation = my_invokable.invoke()
-  enact.pprint(invocation)  # Prints call graph of execution.
-```
-
-### Creating UIs
-
-Since invokables carry type annotations, enact can auto-generate a UI.
-
-```python
-with store:
-  ref = enact.commit(my_invokable)
-  enact.GUI(ref).launch(share=True)
-```
-
-This will open a Gradio UI with a run button that can be used to invoke the
-resource.
-
-### Requesting inputs and replaying invocations
-Invocations that end in an exception can be continued by replacing the raised
-exception with an injected value. This allows suspending an execution in order
-to collect information from a human user or other data source.
-
-```python
-@enact.typed_invokable(input_type=enact.NoneResource, output_type=MyResource)
-class SampleFromHuman(enact.Invokable):
-
-  def call(self):
-    request_int = enact.RequestInput(enact.Int)
-    request_float = enact.RequestInput(enact.Float)
-    return MyResource(
-      x=request_int(enact.Str('Please provide an x-value for MyResource.')),
-      y=request_float(enact.Str('Please provide a y-value for MyResource.')))
+    return enact.request_input(enact.Int, context='Please roll a six-sided die')
 
 with store:
-  h = SampleFromHuman()
-  # Run until first input request.
-  invocation = h.invoke()
-  # Access InputRequest exception.
-  input_request = invocation.response().raised()
-  print(input_request.input())  # Prints 'Please provide an x-value ...'.
-  # Run until second input request.
-  invocation = input_request.continue_invocation(invocation, enact.Int(42))
-  # Access InputRequest exception.
-  input_request = invocation.response().raised()
-  print(input_request.input())  # Prints 'Please provide a y-value ...'.
-  # Run until completion.
-  invocation = input_request.continue_invocation(invocation, enact.Float(69.0))
-  print(invocation.response().output())  # Prints 'MyResource(x=42, y=69.0)'.
+  roll_dice = RollDice(HumanRollsDie())
+  inv_gen = enact.InvocationGenerator(roll_dice, num_rolls)
+  for input_request in inv_gen:
+    inv_gen.set_input(enact.Int(6))  # Provide a roll of 6.
+print(inv_gen.invocation.get_output())  # Print 18
 ```
 
-The `continue_invocation` function makes use of the replay feature, which allows
-replaying a previous invocation while overriding previously encountered
-exceptions with injected inputs:
+## Documentation
 
-```python
-with store:
-  # Run until first exception.
-  invocation = h.invoke()
-  def override_exception(exc_ref):
-    if exc_ref().requested_type == enact.Int:
-      return enact.Int(42)
-    if exc_ref().requested_type == enact.Float:
-      return enact.Float(69.0)
-  # Inject first value and run until second exception.
-  invocation = invocation.replay(override_exception)
-  # Inject second value and run until completion.
-  invocation = invocation.replay(override_exception)
-  print(invocation.response().output())  # Prints 'MyResource(x=42, y=69.0)'.
-```
-
-This mechanism also allows UIs to sample inputs from humans. The type of input
-must be preregistered on UI launch:
-
-```python
-with store:
-  ref = enact.commit(h)
-  enact.GUI(ref, input_required_inputs=[enact.Int, enact.Float]).launch(
-    share=True)
-```
-
-## Usage / Examples
-
-A list of ipython notebook examples, including the code in the quickstart
-section can be found in the
-[examples](https://github.com/agentic-ai/enact/tree/main/examples) directory.
-
-A tutorial that explains the basic concepts of the enact framework can be found
-[here](https://github.com/agentic-ai/enact/tree/main/examples/tutorial.ipynb).
+Full documentation is work in progress. An explanation of enact concepts can be
+found at [examples](https://github.com/agentic-ai/enact/tree/main/examples).
 
 ## Why enact?
 
@@ -194,13 +149,14 @@ process, summarized in the table below.
 
 In traditional software, a large part of engineering effort revolves around
 implementing features and debugging errors. In contrast, a generative software
-system may be feature complete and bug-free, but still not suitable for
+system may be feature-complete and bug-free, but still not suitable for
 deployment. Consider the following examples:
 
 * A search chatbot that is sometimes rude and unhelpful
 * An autonomous agent that recursively sets itself goals and accomplishes tasks,
-but has a tendency to drift off into behavioral loops.
-* An AI avatar generator that produces accurate but attractive portrait images.
+  but has a tendency to drift off into behavioral loops.
+* An AI avatar generator that produces accurate but unattractive portrait
+  images.
 
 System correctness is no longer merely a question of specific inputs leading
 to outputs that are either correct or incorrect, but of the _distribution of
@@ -255,7 +211,7 @@ In conventional software, executions are typically tracked at a low level
 of resolution, since their primary use is to track metrics and debug errors.
 A generative system represents an implicitly specified distribution, and
 its execution history provides valuable information that may be used for
-training.
+analysis or training.
 
 * System outputs can be corrected, scored or critiqued by humans or AI
 models to produce data for fine-tuning.
