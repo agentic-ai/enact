@@ -101,8 +101,8 @@ class StoreTest(unittest.TestCase):
     resource = SimpleResource(x=1, y=2.0)
     ref = store.commit(resource)
     self.assertTrue(store.has(ref))
-    self.assertEqual(store.get(ref), resource)
-    self.assertNotEqual(id(store.get(ref)), id(resource))
+    self.assertEqual(store.checkout(ref), resource)
+    self.assertNotEqual(id(store.checkout(ref)), id(resource))
 
   def test_custom_ref(self):
     """Test stores with custom ref types."""
@@ -111,8 +111,8 @@ class StoreTest(unittest.TestCase):
     ref = store.commit(resource)
     self.assertIsInstance(ref, JsonPackedRef)
     self.assertTrue(store.has(ref))
-    self.assertEqual(store.get(ref), resource)
-    self.assertNotEqual(id(store.get(ref)), id(resource))
+    self.assertEqual(store.checkout(ref), resource)
+    self.assertNotEqual(id(store.checkout(ref)), id(resource))
 
   def test_caching(self):
     """Test that caching works correctly."""
@@ -121,15 +121,15 @@ class StoreTest(unittest.TestCase):
     ref = store.commit(resource)
 
     # get() works because cached reference is correct.
-    ref.get().x = 10
+    ref.checkout().x = 10
 
     # get() fails because cached reference is incorrect.
     with self.assertRaises(contexts.NoActiveContext):
-      ref.get()
+      ref.checkout()
 
     with store:
       # Refetches the correct resource from the store.
-      self.assertEqual(ref.get().x, 1)
+      self.assertEqual(ref.checkout().x, 1)
 
   def test_modify(self):
     """Tests the modify context."""
@@ -141,7 +141,7 @@ class StoreTest(unittest.TestCase):
     with store:
       with ref.modify() as resource:
         resource.x = 10
-      self.assertEqual(ref.get().x, 10)
+      self.assertEqual(ref.checkout().x, 10)
     self.assertNotEqual(ref.digest, old_digest)
 
   def test_pack_none(self):
@@ -159,4 +159,4 @@ class StoreTest(unittest.TestCase):
       resource = SimpleResource(x=1, y=2.0)
       ref = store.commit(resource)
       self.assertTrue(store.has(ref))
-      self.assertEqual(store.get(ref), resource)
+      self.assertEqual(store.checkout(ref), resource)

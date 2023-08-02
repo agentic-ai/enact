@@ -45,8 +45,8 @@ class TestResourceTypes(unittest.TestCase):
       with self.subTest(resource_type=resource_type):
         resource = cast(enact.ResourceBase, resource_type(value))
         ref = self.store.commit(resource)
-        ref2 = self.store.commit(ref.get())
+        ref2 = self.store.commit(ref.checkout())
         self.assertEqual(ref, ref2)
 
-        for v1, v2 in zip(resource.field_values(), ref2.get().field_values()):
+        for v1, v2 in zip(resource.field_values(), ref2.checkout().field_values()):
           self.assertEqual(v1, v2)

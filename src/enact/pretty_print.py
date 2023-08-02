@@ -96,7 +96,7 @@ class PPrinter:
 
   def from_ref(self, v: interfaces.FieldValue, depth: int) -> PPValue:
     assert isinstance(v, references.Ref)
-    resource: interfaces.ResourceBase = v.get()
+    resource: interfaces.ResourceBase = v()
     if ((self.max_ref_depth and depth > self.max_ref_depth) or
         (self.skip_repeated_refs and v.digest in self._seen_refs)):
       return PPValue(f'-> {type(resource).__name__}#{v.digest[0:6]}', [])
