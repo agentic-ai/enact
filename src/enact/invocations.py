@@ -328,8 +328,8 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
         raise ReplayError(
           f'Expected invocation {invokable}({input}) but got '
           f'{child.request().invokable()}({child.request().input()}).\n'
-          f'Ensure that all non-deterministic functions are wrapped in '
-          f'invokables or use strict=False.')
+          f'Ensure that calls to subinvokable are deterministic '
+          f'or use strict=False.')
     else:
       # No matching replay found.
       return None, ReplayContext([], self._exception_override)
