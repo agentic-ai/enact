@@ -15,8 +15,8 @@ To this end, enact provides support for the following features:
 * Journaled executions of recursively-nested generative python components.
 * The ability to rewind and replay past executions.
 * Easy interchangeability of human and AI-driven components.
-* Support for all of the above features in higher-level generative flows, i.e.,
-  generative programs that generate and execute generative programs.
+* Support for all of the above features in higher-order generative flows, i.e.,
+  generative programs that generate and execute other generative flows.
 
 See [here](#why-enact) for an explanation of the significance of these features
 in the context of generative software.
@@ -31,10 +31,8 @@ be installed via:
 pip install enact
 ```
 
-### Building generative flows in enact
-
-Tracking executions requires that generative components as well as their
-inputs and outputs are wrapped in custom-defined enact types.
+Enact defines generative components as python classes with annotated input and
+output types:
 
 ```python
 import enact
@@ -68,52 +66,39 @@ roll_dice = RollDice(RollDie(6))
 print(roll_dice(enact.Int(3)))   # Print sum of 3 rolls.
 ```
 
-### Journaled execution
-
-Generative flows defined in enact support journaled execution, which allows
-inspection of the execution history.
+Executions can be journaled and committed to persistent storage. A journaled
+execution supports rewinding and replaying.
 
 ```python
-with enact.Store() as store:
+with enact.FileStore('/tmp/my_store') as store:
   num_rolls = enact.commit(enact.Int(3))  # commit input to store.
   invocation = roll_dice.invoke(num_rolls)  # create journaled execution.
+
   print(invocation.get_output())  # Print sum of 3 rolls
   for i in range(3):
     print(invocation.get_child(i).get_output())  # Print each die roll.
-```
 
-### Rewinding and replaying executions
-
-Journaled executions can be replayed or rewound. The following
-rewinds the journaled execution to reroll only the last die.
-
-```python
-with store:
-  invocation = invocation.rewind().replay()  # Reexecute the last call to RollDie.
+  invocation = invocation.rewind()  # Rewind by one dice roll.
+  invocation = invocation.replay()  # Resample the last dice roll.
   print(invocation.get_output())
 ```
 
-This makes it easy to, e.g., explore the tree of possible executions of a
-component.
-
-### Human in the loop
-
-When human inputs are required, the execution can halt and later resume with
-externally provided data. This makes it easy to swap out generative AI
-components with human-driven input and vice versa.
+Human input can be flexibly swapped in for generative components:
 
 ```python
 @enact.typed_invokable(enact.NoneResource, enact.Int)
 class HumanRollsDie(enact.Invokable):
   def call(self):
-    return enact.request_input(enact.Int, context='Please roll a six-sided die')
+    return enact.request_input(
+      enact.Int, context='Please roll a six-sided die')
 
 with store:
   roll_dice = RollDice(HumanRollsDie())
   inv_gen = enact.InvocationGenerator(roll_dice, num_rolls)
   for input_request in inv_gen:
     inv_gen.set_input(enact.Int(6))  # Provide a roll of 6.
-print(inv_gen.invocation.get_output())  # Print 18
+
+print(inv_gen.invocation.get_output())  # Prints '18'.
 ```
 
 ## Documentation
