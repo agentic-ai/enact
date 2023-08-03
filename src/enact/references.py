@@ -285,3 +285,13 @@ class Store(contexts.Context):
       raise NotFound(ref.id)
     packed_resource = PackedResource(resource_data, ref=ref)
     return ref.unpack(packed_resource)
+
+
+def InMemoryStore() -> Store:
+  """Returns an in-memory store."""
+  return Store(backend=InMemoryBackend())
+
+
+def FileStore(root_dir: str):
+  """Returns a file-based store."""
+  return Store(backend=FileBackend(root_dir))
