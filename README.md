@@ -79,7 +79,7 @@ with enact.FileStore('/tmp/my_store') as store:
     print(invocation.get_child(i).get_output())  # Print each die roll.
 
   invocation = invocation.rewind()  # Rewind by one dice roll.
-  invocation = invocation.replay()  # Resample the last dice roll.
+  invocation = invocation.replay()  # Replay dice roll 1 & 2, resample roll 3.
   print(invocation.get_output())
 ```
 
