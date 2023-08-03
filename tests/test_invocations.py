@@ -269,6 +269,33 @@ class InvocationsTest(unittest.TestCase):
       (subsubinvocation,) = subinvocation.get_children()
       self.assertTrue(subsubinvocation.get_raised_here())
 
+  def test_reraise_in_replay(self):
+    """Tests that exceptions are replayed."""
+    native_errors_raised = 0
+    class PythonErrorOnInvoke(enact.Invokable):
+      def call(self, input: enact.ResourceBase):
+        nonlocal native_errors_raised
+        native_errors_raised += 1
+        raise ValueError('foo')
+
+    @dataclasses.dataclass
+    class SubCall(enact.Invokable):
+      invokable: enact.Ref[enact.InvokableBase]
+      def call(self, input: enact.ResourceBase):
+        self.invokable.checkout()(input)
+
+    with self.store as store:
+      error_fun = PythonErrorOnInvoke()
+      subcall_1 = SubCall(store.commit(error_fun))
+      subcall_2 = SubCall(store.commit(subcall_1))
+      invocation = subcall_2.invoke(store.commit(enact.Int(5)))
+      self.assertEqual(native_errors_raised, 1)
+      with self.assertRaises(enact.WrappedException):
+        with invocations.ReplayContext(subinvocations=[invocation]):
+          subcall_2(enact.Int(5))
+      self.assertEqual(native_errors_raised, 1)
+
+
   def test_input_changed_error(self):
     @dataclasses.dataclass
     class Changeable(enact.Resource):
