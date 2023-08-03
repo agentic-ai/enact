@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import abc
+import collections
 import contextlib
 import dataclasses
 import inspect
 import traceback
-from typing import Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
+from typing import Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, cast
 
 
 from enact import contexts
@@ -615,3 +616,124 @@ def request_input(
   if for_resource is None:
     for_resource = interfaces.NoneResource()
   return RequestInput(requested_type, context)(for_resource)
+
+
+class InvocationGenerator(
+    collections.Generator,
+    Generic[I_contra, O_co]):
+  """A generator that yields InputRequests from an invocation."""
+
+  def __init__(
+      self,
+      invokable: InvokableBase[I_contra, O_co],
+      input: references.Ref[I_contra]):
+    """Initializes an interactive invocation."""
+    self._invocation: Optional[Invocation[I_contra, O_co]] = None
+    self._invokable = invokable
+    self._input = input
+    self._request_input: Optional[interfaces.ResourceBase] = None
+
+  @property
+  def complete(self) -> bool:
+    """Whether the invocation is complete."""
+    if not self._invocation:
+      return False
+    if self._invocation.successful():
+      return True
+    return not isinstance(self._invocation.get_raised(), InputRequest)
+
+  @property
+  def invocation(self) -> Invocation[I_contra, O_co]:
+    """The invocation."""
+    if not self._invocation:
+      raise InvocationError(
+        'Invocation not started, please call next.')
+    return self._invocation
+
+  @property
+  def input_request(self) -> InputRequest:
+    """The current input request."""
+    if self.complete:
+      raise InvocationError('Invocation is complete.')
+    input_request = self.invocation.get_raised()
+    assert isinstance(input_request, InputRequest)
+    return input_request
+
+  def context(self) -> interfaces.FieldValue:
+    """Returns the context for the input request."""
+    return self.input_request.context
+
+  def requested_type(self) -> Type[interfaces.ResourceBase]:
+    """Returns the requested type of the input."""
+    return self.input_request.requested_type
+
+  def for_resource(self) -> interfaces.ResourceBase:
+    """For which resource is the input requested."""
+    return self.input_request.input()
+
+  def set_input(self, resource: interfaces.ResourceBase):
+    """Set input for the next call to __next__.
+
+    This allows using the generator in iterator-style, e.g.,
+
+      for input_request in invocation_generator:
+        input_request.set_input(...)
+
+    Which can be more convenient than using send():
+
+      input_request = next(invocation_generator)
+      while True:
+        try:
+          input_request.send(...)
+        except StopIteration:
+          break
+
+    Args:
+      resource: The resource to set as input.
+    """
+    self._request_input = resource.deep_copy_resource()
+
+  def __next__(self) -> InputRequest:
+    """Continues the invocation until the next input request or completion."""
+    if self.complete:
+      raise StopIteration()
+
+    if not self._invocation:
+      self._invocation = self._invokable.invoke(self._input)
+      if self.complete:
+        raise StopIteration()
+      return self.input_request
+    else:
+      if self._request_input is None:
+        if not issubclass(interfaces.NoneResource,
+                          self.input_request.requested_type):
+          raise InvocationError(
+            'Invocation requests non-None input. Please use \'send(...)\' '
+            'instead or set the input using \'set_input(...)\'.')
+        self._request_input = interfaces.NoneResource()
+      self._invocation = self.input_request.continue_invocation(
+        self._invocation, self._request_input)
+      self._request_input = None
+      if self.complete:
+        raise StopIteration()
+      return self.input_request
+
+  def send(self, value) -> InputRequest:
+    if not self._invocation:
+      if value is not None:
+        raise TypeError('Can\'t send non-None value to a just-started generator.')
+      return self.__next__()
+    if self.complete:
+      raise StopIteration()
+    if not isinstance(value, self.input_request.requested_type):
+      raise InvokableTypeError(
+        f'Input type {type(value)} does not match requested type: '
+        f'{self.input_request.requested_type}.')
+    self._invocation = self.input_request.continue_invocation(
+      self.invocation, value)
+    if self.complete:
+      raise StopIteration()
+    return self.input_request
+
+  def throw(self, *args, **kwargs):
+    super().throw(*args, **kwargs)
