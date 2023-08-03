@@ -26,6 +26,7 @@ from enact.invocations import InputChanged
 from enact.invocations import InputRequest
 from enact.invocations import InputRequestOutsideInvocation
 from enact.invocations import RequestedTypeUndetermined
+from enact.invocations import InvocationGenerator
 from enact.invocations import Invokable
 from enact.invocations import InvokableBase
 from enact.invocations import InvokableBase
@@ -51,6 +52,8 @@ from enact.references import InMemoryBackend
 from enact.references import Ref
 from enact.references import RefError
 from enact.references import Store
+from enact.references import InMemoryStore
+from enact.references import FileStore
 
 from enact.resources import Resource
 

@@ -485,3 +485,61 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke()
       self.assertEqual(invocation.get_output(), 'Foo')
 
+  def test_invokable_generator_send_without_next(self):
+    """Tests that send without next fails on invokable generator."""
+    with self.store:
+      inv_gen = enact.InvocationGenerator(
+        IntToStr(), enact.commit(enact.Int(3)))
+      with self.assertRaisesRegex(TypeError, '.*non-None.*'):
+        inv_gen.send(enact.Int(3))
+
+  def test_invokable_generator_send_none_without_next(self):
+    """Tests that send None without next works."""
+    with self.store:
+      inv_gen = enact.InvocationGenerator(
+        IntToStr(), enact.commit(enact.Int(3)))
+      with self.assertRaises(StopIteration):
+        inv_gen.send(None)
+
+  def test_invokable_generator_send_flow(self):
+    """Test an invokable generator in a send-based flow."""
+    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    class SumUserRequests(enact.Invokable):
+      def call(self):
+        return enact.Int(
+          enact.request_input(enact.Int) +
+          enact.request_input(enact.Int) +
+          enact.request_input(enact.Int))
+
+    with self.store:
+      inv_gen = enact.InvocationGenerator(
+        SumUserRequests(), enact.commit(enact.NoneResource()))
+      input_request = next(inv_gen)
+      for i in range(5):
+        assert isinstance(input_request, enact.InputRequest)
+        self.assertFalse(inv_gen.complete)
+        try:
+          input_request = inv_gen.send(enact.Int(i))
+        except StopIteration:
+          break
+      self.assertEqual(
+        inv_gen.invocation.get_output(), 0 + 1 + 2)
+
+  def test_invokable_generator_set_input_flow(self):
+    """Test an invokable generator in a send-based flow."""
+    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    class SumUserRequests(enact.Invokable):
+      def call(self):
+        return enact.Int(
+          enact.request_input(enact.Int) +
+          enact.request_input(enact.Int) +
+          enact.request_input(enact.Int))
+
+    with self.store:
+      inv_gen = enact.InvocationGenerator(
+        SumUserRequests(), enact.commit(enact.NoneResource()))
+      for i, _ in enumerate(inv_gen):
+        self.assertFalse(inv_gen.complete)
+        inv_gen.set_input(enact.Int(i))
+      self.assertEqual(
+        inv_gen.invocation.get_output(), 0 + 1 + 2)
