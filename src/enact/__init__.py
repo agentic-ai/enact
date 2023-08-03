@@ -72,6 +72,4 @@ from enact.serialization import JsonSerializer
 from enact.serialization import SerializationError
 from enact.serialization import DeserializationError
 
-from enact.guis import GUI
-
 from enact import contexts
