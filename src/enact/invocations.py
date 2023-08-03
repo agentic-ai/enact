@@ -350,6 +350,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     if response.raised and response.raised_here:
       # Only override exceptions raised in the current frame.
       override = self._exception_override(response.raised)
+      invokable.set_from(response.invokable())
       if override is not None:
         # Typecheck the override.
         output_type = invokable.get_output_type()
@@ -358,12 +359,13 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
             f'Exception override {override} is not of required type '
             f'{invokable.get_input_type()}.')
         # Set invokable from response.
-        invokable.set_from(response.invokable())
         return (
           cast(O_co, override),
           ReplayContext(child.get_children(),
                         self._exception_override,
                         self._strict))
+      # No override found.
+      raise response.raised()
 
     # Trigger reexecution of the invocation.
     return None, ReplayContext(
