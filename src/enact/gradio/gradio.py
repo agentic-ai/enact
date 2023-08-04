@@ -381,7 +381,7 @@ class GUI:
     invokable = self._invokable
     if last_invocation:
       assert isinstance(last_invocation, references.Ref)
-      invokable = last_invocation().response.get().invokable
+      invokable = last_invocation().response().invokable
     invocation = invokable().invoke(references.commit(input_resource))
     return references.commit(invocation)
 
