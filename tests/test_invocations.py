@@ -15,6 +15,7 @@
 """Tests for invocations."""
 
 import dataclasses
+import tempfile
 import time
 from typing import Optional, cast
 import unittest
@@ -77,8 +78,12 @@ class InvocationsTest(unittest.TestCase):
   """Tests invocations."""
 
   def setUp(self):
-    self.backend = enact.InMemoryBackend()
+    self.dir = tempfile.TemporaryDirectory()
+    self.backend = enact.FileBackend(self.dir.name)
     self.store = enact.Store(self.backend)
+
+  def tearDown(self):
+    self.dir.cleanup()
 
   def test_typed_invokable(self):
     """"Test that the decorator works as expected."""
@@ -350,6 +355,7 @@ class InvocationsTest(unittest.TestCase):
       self.assertEqual(leaf_calls, 5)
 
   def test_replay_modifies_invokable(self):
+    @enact.register
     @dataclasses.dataclass
     class Counter(enact.Invokable):
       call_count: int = 0

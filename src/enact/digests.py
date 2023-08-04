@@ -31,7 +31,7 @@ def type_digest(cls: Type[interfaces.ResourceBase]) -> str:
   hash_obj.update(cls.__module__.encode('utf-8'))
   hash_obj.update(b'.')
   hash_obj.update(cls.__qualname__.encode('utf-8'))
-  for field in cls.field_names():
+  for field in sorted(cls.field_names()):
     hash_obj.update(repr(field).encode('utf-8'))
   return hash_obj.hexdigest()
 
@@ -54,11 +54,12 @@ def _digest(
                         interfaces.ResourceDict)):
     if isinstance(value, interfaces.ResourceBase):
       res_type = type(value)
-      items = value.field_items()
+      # Use alphabetical ordering.
+      items = sorted(value.field_items(), key=lambda x: x[0])
     else:
       assert isinstance(value, interfaces.ResourceDict)
       res_type = value.type
-      items = value.items()
+      items = sorted(value.items(), key=lambda x: x[0])
     hash_obj.update(b'res[')
     hash_obj.update(res_type.type_id().encode('utf-8'))
     for k, v in items:

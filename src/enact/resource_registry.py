@@ -36,6 +36,7 @@ class Registry:
     """Initializes a registry."""
     self.allow_reregistration = True
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
+    self.register(interfaces.NoneResource)
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource or reference type."""
