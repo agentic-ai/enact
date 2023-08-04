@@ -80,11 +80,11 @@ class ResourceBase:
   @classmethod
   def field_names(cls) -> Iterable[str]:
     """Returns the names of the fields of the resource."""
-    raise NotImplementedError()
+    raise NotImplementedError(f'{cls} does not implement field_names')
 
   def field_values(self) -> Iterable[FieldValue]:
     """Return a list of field values, aligned with field_names."""
-    raise NotImplementedError()
+    raise NotImplementedError(f'{type(self)} does not implement field_values')
 
   def field_items(self) -> Iterable[Tuple[str, FieldValue]]:
     """Iterate through the field names and values."""
