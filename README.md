@@ -103,8 +103,9 @@ print(inv_gen.invocation.get_output())  # Prints '18'.
 
 ## Documentation
 
-Full documentation is work in progress. An explanation of enact concepts can be
-found at [examples](https://github.com/agentic-ai/enact/tree/main/examples).
+Full documentation is work in progress. A quickstart tutorial and an explanation
+of enact concepts can be found at
+[examples](https://github.com/agentic-ai/enact/tree/main/examples).
 
 ## Why enact?
 
@@ -230,3 +231,11 @@ Voyager use generative AI to generate programs (specified in code or plain
 text), which in turn may be interpreted by generative AI systems; prompts for
 chat-based generative AI could equally be considered code or data.
 
+## Development and Contributing
+
+Enact is currently in an alpha release. The framework is open source and Apache
+licensed. We are actively looking for contributors that are excited about the
+vision.
+
+You can download the source code, report issues and create pull requests at
+https://github.com/agentic-ai/enact.
