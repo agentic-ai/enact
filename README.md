@@ -4,23 +4,26 @@ Enact is a python framework for building generative software, specifically
 software that integrates with machine learning models or APIs that generate
 distributions of outputs.
 
-The advent of generative AI is driving changes in the way software is built. The
-design philosophy of enact to address the needs of emerging AI-based systems in
-a fundamental way close to the programming language. Enact is therefore designed
-as a core framework that addresses the needs of emerging AI-based systems and
-can serve as the basis for development of a generative software stack.
+The advent of generative AI is driving changes in the way software is built.
+The unique challenges of implementing, maintaining and improving generative
+systems indicate a need to rethink the software stack from a first-principles
+perspective. See [why-enact](#why-enact) for a more in-depth discussion.
+
+The design philosophy of enact is to provide an easy-to-use python framework
+that addresses the needs of emerging AI-based systems in a fundamental manner.
+Enact is designed as a core framework that provides low-level primitives
+required by generative software systems.
 
 To this end, enact provides support for the following features:
-* Persistent, versioned storage of data, generative components and executions.
-* Journaled executions of recursively-nested generative python components.
+* The ability to commit data, generative components and executions to
+  persistent storage in a versioned manner.
+* Journaled executions of generative python components.
 * The ability to rewind and replay past executions.
-* Easy interchangeability of human and AI-driven components.
+* Easy interchangeability of human and AI-driven subsystems.
 * Support for all of the above features in higher-order generative flows, i.e.,
   generative programs that generate and execute other generative flows.
-
-See [here](#why-enact) for an explanation of the significance of these features
-in the context of generative software.
-
+* A simple hash-based storage model that simplifies distributed and
+  asynchronous generative flows.
 
 ## Installation and overview
 
@@ -104,8 +107,8 @@ print(inv_gen.invocation.get_output())  # Prints '18'.
 ## Documentation
 
 Full documentation is work in progress. A quickstart tutorial and an explanation
-of enact concepts can be found at
-[examples](https://github.com/agentic-ai/enact/tree/main/examples).
+of enact concepts can be found in the
+[examples directory](https://github.com/agentic-ai/enact/tree/main/examples).
 
 ## Why enact?
 
@@ -114,7 +117,7 @@ process.
 
 Traditional software relies primarily on functional buildings blocks in which
 inputs and system state directly determine outputs. In contrast, modern software
-increasingly utilizes generative elements, in which each input is associated
+increasingly utilizes generative AI elements, in which each input is associated
 with a range of possible outputs.
 
 This seemingly small change in emphasis - from functions to conditional
@@ -146,14 +149,13 @@ deployment. Consider the following examples:
 
 System correctness is no longer merely a question of specific inputs leading
 to outputs that are either correct or incorrect, but of the _distribution of
-outputs_ satisfying some quality target.
+outputs_ satisfying some implicitly or explicitly defined quality target.
 
 In cases where generativity is localized, e.g., when the software is a thin
 wrapper around a large language model (LLM) or image generator, machine-learning
 tools and techniques can directly be used to improve the system, but in cases
-where multiple generative-components work together to produce an output, or a
-single generative model is called repeatedly, the system must be fitted to the
-target distribution as a whole.
+where multiple generative components work together to produce an output the
+system must be fitted to the target distribution as a whole.
 
 ### Generative software requires recursively swapping subsystems
 
@@ -165,10 +167,11 @@ for example:
 
 * A foundation text-to-image model may perform well on a wide range of
 prompts, whereas an API-identical fine-tuned version may be less general but
-produce better results for images in a particular style.
+produce better results for images of a particular style.
 * An instruction-tuned LLM and an LLM trained as a chatbot both autoregressively
-extend token sequences, but one will tend to be better suited towards data
-processing applications, while the other will make a better math tutor.
+extend token sequences, but one may be better suited towards data processing
+applications, while another will make a better math tutor.
+* Different components may have vastly different execution costs.
 
 Generative system outputs are distributions that optimized towards some - often
 implicitly specified - target. Data selection, training parameters, model
@@ -187,9 +190,8 @@ domain. The combination of API compatibility and variation lends itself to a
 more evolutionary collaborative style than traditional software, where
 shared effort tends to centralize into fewer, lower-level frameworks.
 
-This new collaborative approach is evidenced by:
-* Prompt sharing in image generators and LLMs.
-* Public databases of fine-tuned models.
+This new collaborative approach is already evidenced by widespread sharing of
+prompt templates and the existence of public databases of fine-tuned models.
 
 ### Generative software reflects on its executions.
 
@@ -233,7 +235,7 @@ chat-based generative AI could equally be considered code or data.
 
 ## Development and Contributing
 
-Enact is currently in an alpha release. The framework is open source and Apache
+Enact is currently in alpha release. The framework is open source and Apache
 licensed. We are actively looking for contributors that are excited about the
 vision.
 
