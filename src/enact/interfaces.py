@@ -99,6 +99,8 @@ class ResourceBase:
   @staticmethod
   def _to_dict_value(v: FieldValue) -> ResourceDictValue:
     """Transforms a field value to a resource dict value."""
+    if isinstance(v, ResourceBase):
+      return v.to_resource_dict()
     if isinstance(v, PRIMITIVES):
       return v
     if isinstance(v, type) and issubclass(v, ResourceBase):
@@ -114,8 +116,6 @@ class ResourceBase:
       return {
         _assert_str(k): ResourceBase._to_dict_value(v)
         for k, v in v.items()}
-    if isinstance(v, ResourceBase):
-      return v.to_resource_dict()
     raise FieldTypeError(
       f'Encountered unsupported field type {type(v)}: {v}')
 
