@@ -519,7 +519,8 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
       raise_on_invocation_error:bool=True,
-      strict: bool=True) -> Invocation[I_contra, O_co]:
+      strict: bool=True,
+      commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 
     Args:
@@ -530,6 +531,7 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       raise_on_invocation_error: Whether invocation errors should be reraised.
       strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
+      commit: Whether to commit the new invocation object.
     Returns:
       The invocation generated.
     """
@@ -557,6 +559,8 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
       except Exception:
         pass  # Do nothing
       invocation = builder.invocation
+    if commit:
+      references.commit(invocation)
     return invocation
 
 
@@ -627,10 +631,18 @@ class InvocationGenerator(
 
   def __init__(
       self,
-      invokable: InvokableBase[I_contra, O_co],
-      input: references.Ref[I_contra]):
+      invokable: Optional[InvokableBase[I_contra, O_co]]=None,
+      input: Optional[references.Ref[I_contra]]=None,
+      from_invocation: Optional[Invocation[I_contra, O_co]]=None):
     """Initializes an interactive invocation."""
+    if from_invocation is not None and invokable is not None:
+      raise ValueError(
+        'Cannot specify both an invokable and an invocation.')
+    if from_invocation is not None and input is not None:
+      raise ValueError(
+        'Cannot specify both an input and an invocation.')
     self._invocation: Optional[Invocation[I_contra, O_co]] = None
+    self._from_invocation = from_invocation
     self._invokable = invokable
     self._input = input
     self._request_input: Optional[interfaces.ResourceBase] = None
@@ -642,6 +654,8 @@ class InvocationGenerator(
       return False
     if self._invocation.successful():
       return True
+    if not self._invocation.response().raised:
+      return False
     return not isinstance(self._invocation.get_raised(), InputRequest)
 
   @property
@@ -660,18 +674,6 @@ class InvocationGenerator(
     input_request = self.invocation.get_raised()
     assert isinstance(input_request, InputRequest)
     return input_request
-
-  def context(self) -> interfaces.FieldValue:
-    """Returns the context for the input request."""
-    return self.input_request.context
-
-  def requested_type(self) -> Type[interfaces.ResourceBase]:
-    """Returns the requested type of the input."""
-    return self.input_request.requested_type
-
-  def for_resource(self) -> interfaces.ResourceBase:
-    """For which resource is the input requested."""
-    return self.input_request.input()
 
   def set_input(self, resource: interfaces.ResourceBase):
     """Set input for the next call to __next__.
@@ -701,7 +703,19 @@ class InvocationGenerator(
       raise StopIteration()
 
     if not self._invocation:
-      self._invocation = self._invokable.invoke(self._input)
+      if self._from_invocation:
+        self._invocation = self._from_invocation.replay()
+      else:
+        assert self._invokable
+        if not self._input:
+          if interfaces.NoneResource != self._invokable._input_type:
+            raise InvocationError(
+              'Invokable does not have input type NoneResource. '
+              'Please provide an explicit input reference on generator '
+              'construction')
+          self._input = cast(references.Ref[I_contra],
+                             references.commit(interfaces.NoneResource()))
+        self._invocation = self._invokable.invoke(self._input)
       if self.complete:
         raise StopIteration()
       return self.input_request
