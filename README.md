@@ -106,8 +106,8 @@ print(inv_gen.invocation.get_output())  # Prints '18'.
 
 ## Documentation
 
-Full documentation is work in progress. A quickstart tutorial and an explanation
-of enact concepts can be found in the
+Full documentation is work in progress. An explanation of enact concepts can be
+found and examples can be found in the
 [examples directory](https://github.com/agentic-ai/enact/tree/main/examples).
 
 ## Why enact?
