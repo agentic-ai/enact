@@ -8,6 +8,7 @@ enact = {editable = true, path = "."}
 jupyter = "*"
 ipywidgets = "*"
 replicate = "*"
+openai = "*"
 
 [dev-packages]
 mypy = "*"
