@@ -91,7 +91,7 @@ def _digest(
     hash_obj.update(b']')
   elif isinstance(value, Mapping):
     hash_obj.update(b'map[')
-    for k, v in value.items():
+    for k, v in sorted(value.items(), key=lambda x: x[0]):
       if not isinstance(k, str):
         raise interfaces.FieldTypeError('Map keys must be strings')
       hash_obj.update(repr(k).encode('utf-8'))
