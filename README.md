@@ -22,8 +22,8 @@ To this end, enact provides support for the following features:
 * Easy interchangeability of human and AI-driven subsystems.
 * Support for all of the above features in higher-order generative flows, i.e.,
   generative programs that generate and execute other generative flows.
-* A simple hash-based storage model that simplifies distributed and
-  asynchronous generative flows.
+* A simple hash-based storage model that simplifies implementation of
+  distributed and asynchronous generative systems.
 
 ## Installation and overview
 
@@ -34,7 +34,7 @@ be installed via:
 pip install enact
 ```
 
-Enact defines generative components as python classes with annotated input and
+Enact wraps generative components as python dataclasses with annotated input and
 output types:
 
 ```python
@@ -43,9 +43,7 @@ import enact
 import dataclasses
 import random
 
-@enact.typed_invokable(
-  input_type=enact.NoneResource,
-  output_type=enact.Int)
+@enact.typed_invokable(input_type=enact.NoneResource, output_type=enact.Int)
 @dataclasses.dataclass
 class RollDie(enact.Invokable):
   """An enact invokable that rolls a die."""
@@ -54,61 +52,66 @@ class RollDie(enact.Invokable):
   def call(self):
     return enact.Int(random.randint(1, self.sides))
 
+roll_die = RollDie(sides=6)
+print(roll_die())  # Print score
+```
 
-@enact.typed_invokable(
-  input_type=enact.Int,
-  output_type=enact.Int)
+Data and generative components can be committed to and checked out of persistent
+storage.
+
+```python
+with enact.FileStore('./enact_store') as store:
+  roll_die_v0 = enact.commit(roll_die)  # Return a reference.
+  roll_die.sides = 20
+  print(roll_die())                     # Roll 20 sided die.
+  roll_die = roll_die_v0.checkout()     # Check out 6 sided die.
+  print(roll_die())                     # Roll 6 sided die.
+
+```
+
+Executions can be journaled with the `invoke` command.
+
+```python
+@enact.typed_invokable(enact.Int, enact.Int)
 @dataclasses.dataclass
 class RollDice(enact.Invokable):
-  """An enact invokable that rolls a specified number of dice."""
-  roll: enact.Invokable
-  def call(self, num_dice: enact.Int):
-    return enact.Int(sum(self.roll() for _ in range(num_dice)))
+  """Roll the indicated number of dice."""
+  die: enact.Invokable
 
-roll_dice = RollDice(RollDie(6))
-print(roll_dice(enact.Int(3)))   # Print sum of 3 rolls.
-```
+  def call(self, num_rolls: enact.Int):
+    return enact.Int(sum(self.die() for _ in range(num_rolls)))
 
-Executions can be journaled and committed to persistent storage. A journaled
-execution supports rewinding and replaying.
-
-```python
-with enact.FileStore('/tmp/my_store') as store:
-  num_rolls = enact.commit(enact.Int(3))  # commit input to store.
-  invocation = roll_dice.invoke(num_rolls)  # create journaled execution.
-
-  print(invocation.get_output())  # Print sum of 3 rolls
-  for i in range(3):
-    print(invocation.get_child(i).get_output())  # Print each die roll.
-
-  invocation = invocation.rewind()  # Rewind by one dice roll.
-  invocation = invocation.replay()  # Replay dice roll 1 & 2, resample roll 3.
-  print(invocation.get_output())
-```
-
-Human input can be flexibly swapped in for generative components:
-
-```python
-@enact.typed_invokable(enact.NoneResource, enact.Int)
-class HumanRollsDie(enact.Invokable):
-  def call(self):
-    return enact.request_input(
-      enact.Int, context='Please roll a six-sided die')
+roll_dice = RollDice(roll_die)
 
 with store:
-  roll_dice = RollDice(HumanRollsDie())
-  inv_gen = enact.InvocationGenerator(roll_dice, num_rolls)
-  for input_request in inv_gen:
-    inv_gen.set_input(enact.Int(6))  # Provide a roll of 6.
-
-print(inv_gen.invocation.get_output())  # Prints '18'.
+  num_rolls = enact.commit(enact.Int(3))  # commit input to store.
+  invocation = roll_dice.invoke(num_rolls)  # create journaled execution.
+  print(invocation.get_output())  # Print sum of 3 rolls
 ```
+
+Invocations allow investigating details of the execution and allow for
+advanced features such as rewind/replay.
+
+```python
+# Print individual dice rolls.
+with store:
+  for i in range(3):
+    roll_result = invocation.get_child(i).get_output()
+    print(f'Roll {i} was {roll_result}')
+
+# Rewind the last roll and replay it.
+with store:
+  two_rolls = invocation.rewind(1)        # Rewind by one call.
+  print(two_rolls.replay().get_output())
+```
+
+See the [quickstart](examples/quickstart.ipynb) and
+[enact concepts](examples/enact_concepts.ipynb) for more information.
 
 ## Documentation
 
-Full documentation is work in progress. A quickstart tutorial, explanation of
-enact concepts and examples can be found in the
-[examples directory](https://github.com/agentic-ai/enact/tree/main/examples).
+Full documentation is work in progress. Please take a look at the
+'examples' directory.
 
 ## Why enact?
 
