@@ -89,6 +89,15 @@ class Bytes(bytes, _ResourceMixin):
     return bytes
 
 
+@resource_registry.register
+class List(list, _ResourceMixin):
+
+  @classmethod
+  def field_value_type(cls) -> Type:
+    """Return the field value type."""
+    return list
+
+
 N = TypeVar('N', bound='NPArray')
 
 

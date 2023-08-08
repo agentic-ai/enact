@@ -33,6 +33,7 @@ class TestResourceTypes(unittest.TestCase):
     (enact.Str, 'abc'),
     (enact.NPArray, np.array([0.0, 1.0, 2.0])),
     (enact.Image, PIL.Image.new('RGB', (10, 10), 'red')),
+    (enact.List, [1, 2, 3]),
   ]
 
   def setUp(self):
