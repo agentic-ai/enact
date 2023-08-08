@@ -14,10 +14,12 @@
 
 """Tests for invocations."""
 
+import asyncio
 import dataclasses
+import random
 import tempfile
 import time
-from typing import Optional, cast
+from typing import List, Optional, cast
 import unittest
 from unittest import mock
 
@@ -194,7 +196,7 @@ class InvocationsTest(unittest.TestCase):
           nested = NestedFunction()
           inner_invocation = nested.invoke(store.commit(enact.Int(1)))
           # The invocation should not be tracked in the builder.
-          self.assertEqual(builder.children, [])
+          self.assertEqual(builder._children, None)
         # Redo the invocation outside the builder.
         outer_invocation = nested.invoke(store.commit(enact.Int(1)))
         # Ensure that executing in the misleading context made no difference.
@@ -274,7 +276,7 @@ class InvocationsTest(unittest.TestCase):
       (subsubinvocation,) = subinvocation.get_children()
       self.assertTrue(subsubinvocation.get_raised_here())
 
-  def test_reraise_in_replay(self):
+  def test_no_reraise_in_replay(self):
     """Tests that exceptions are replayed."""
     native_errors_raised = 0
     class PythonErrorOnInvoke(enact.Invokable):
@@ -295,10 +297,11 @@ class InvocationsTest(unittest.TestCase):
       subcall_2 = SubCall(store.commit(subcall_1))
       invocation = subcall_2.invoke(store.commit(enact.Int(5)))
       self.assertEqual(native_errors_raised, 1)
-      with self.assertRaises(enact.WrappedException):
-        with invocations.ReplayContext(subinvocations=[invocation]):
+      with self.assertRaises(ValueError):
+        with invocations.ReplayContext(subinvocations=[
+            enact.commit(invocation)]):
           subcall_2(enact.Int(5))
-      self.assertEqual(native_errors_raised, 1)
+      self.assertEqual(native_errors_raised, 2)
 
 
   def test_input_changed_error(self):
@@ -322,10 +325,18 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(
         enact.commit(enact.Int(0)))
       with enact.ReplayContext(
-          subinvocations=[invocation],
+          subinvocations=[enact.commit(invocation)],
           exception_override=lambda x: enact.Int(100)):
         result = fun(enact.Int(0))
       self.assertEqual(result, 106)
+
+  def test_replay_invocation(self):
+    """Test replaying an invocation."""
+    fun = NestedFunction()
+    with self.store:
+      invocation = fun.invoke(enact.commit(enact.Int(0)))
+      replay = invocation.replay()
+      self.assertEqual(invocation, replay)
 
   def test_rewind_call(self):
     """Test rewinding a call."""
@@ -394,7 +405,7 @@ class InvocationsTest(unittest.TestCase):
             child_response.raised = None
             child_response.output = enact.commit(enact.Int(100))
       with enact.ReplayContext(
-          subinvocations=[invocation]):
+          subinvocations=[enact.commit(invocation)]):
         result = fun(enact.Int(0))
       self.assertEqual(result, 106)
 
@@ -405,7 +416,7 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(
         enact.commit(enact.Int(0)))
       with enact.ReplayContext(
-          subinvocations=[invocation],
+          subinvocations=[enact.commit(invocation)],
           exception_override=lambda x: enact.Int(100), strict=False):
         with self.assertRaises(ValueError):
           # Exception override is not active since we're ignoring the
@@ -419,7 +430,7 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(
         enact.commit(enact.Int(0)))
       with enact.ReplayContext(
-          subinvocations=[invocation],
+          subinvocations=[enact.commit(invocation)],
           exception_override=lambda x: enact.Int(100), strict=True):
         with self.assertRaises(enact.ReplayError):
           fun(enact.Int(1))
@@ -549,3 +560,196 @@ class InvocationsTest(unittest.TestCase):
         inv_gen.set_input(enact.Int(i))
       self.assertEqual(
         inv_gen.invocation.get_output(), 0 + 1 + 2)
+
+
+@enact.register
+@dataclasses.dataclass
+class AsyncWrapper(enact.AsyncInvokable):
+  """An async wrapper for a sync invokable."""
+  fun: enact._InvokableBase
+  async def call(self, value: enact.ResourceBase):
+    if isinstance(self.fun, enact.InvokableBase):
+      return self.fun(value)
+    elif isinstance(self.fun, enact.AsyncInvokable):
+      return await self.fun(value)
+
+@enact.typed_invokable(enact.Float, enact.Float)
+@dataclasses.dataclass
+class Sleep(enact.AsyncInvokable):
+  """Calls asyncio.sleep and returns actual time slept."""
+  async def call(self, value: enact.Float) -> enact.Float:
+    before = time.time()
+    await asyncio.sleep(value)
+    after = time.time()
+    return enact.Float(after - before)
+
+
+@enact.register
+@dataclasses.dataclass
+class AwaitInTask(enact.AsyncInvokable):
+  """Launches another invokable in a task and possibly awaits it."""
+  fun: enact.AsyncInvokable
+
+  async def call(self, value: enact.ResourceBase) -> enact.ResourceBase:
+    return await asyncio.get_running_loop().create_task(self.fun(value))
+
+
+@enact.register
+@dataclasses.dataclass
+class RunawayTasks(enact.AsyncInvokable):
+  """Invalid invokable that returns before all tasks are complete."""
+
+  async def call(self, value: enact.ResourceBase) -> enact.ResourceBase:
+    sleep = Sleep()
+    sleeps = [sleep(i * 0.1) for i in range(10)]
+    await asyncio.wait(sleeps, timeout=0.2)
+
+@enact.typed_invokable(enact.NoneResource, enact.Int)
+class AsyncRollDie(enact.AsyncInvokable):
+  async def call(self):
+    await asyncio.sleep(0.1 * random.random())
+    return enact.Int(random.randint(1, 6))
+
+
+@enact.typed_invokable(enact.Int, enact.Int)
+class AsyncRollConcurrentDice(enact.AsyncInvokable):
+  async def call(self, n: enact.Int):
+    result = await asyncio.gather(
+      *[AsyncRollDie()() for _ in range(n)])
+    return enact.Int(sum(result))
+
+
+@enact.typed_invokable(enact.NoneResource, enact.NoneResource)
+class AsyncFail(enact.AsyncInvokable):
+  async def call(self):
+    await asyncio.sleep(0.01)
+    raise ValueError('AsyncFail')
+
+
+@enact.typed_invokable(enact.NoneResource, enact.List)
+@dataclasses.dataclass
+class Gather(enact.AsyncInvokable):
+  invokables: List
+  return_exceptions: bool
+
+  async def call(self):
+    results = await asyncio.gather(
+      *[i() for i in self.invokables],
+      return_exceptions=self.return_exceptions)
+    if any(isinstance(r, Exception) for r in results):
+      raise ValueError('Got exception in Gather')
+    return results
+
+
+class AsyncInvocationsTest(unittest.TestCase):
+  """Tests invocations."""
+
+  def setUp(self):
+    self.dir = tempfile.TemporaryDirectory()
+    self.backend = enact.FileBackend(self.dir.name)
+    self.store = enact.Store(self.backend)
+
+  def test_call(self):
+    """Tests calling an async invokable directly."""
+    fun = AsyncWrapper(IntToStr())
+    result = asyncio.run(fun(enact.Int(3)))
+    self.assertEqual(result, '3')
+
+  def test_invoke(self):
+    """Tests basic invocations."""
+    fun = AsyncWrapper(IntToStr())
+    with self.store:
+      result = asyncio.run(fun.invoke(enact.commit(enact.Int(3))))
+      self.assertEqual(
+        result,
+        enact.Invocation(
+          enact.commit(enact.Request(
+            enact.commit(fun),
+            enact.commit(enact.Int(3)))),
+          enact.commit(enact.Response(
+            enact.commit(fun),
+            enact.commit(enact.Str('3')),
+            None,
+            False,
+            [
+              enact.commit(enact.Invocation(
+                enact.commit(enact.Request(
+                  enact.commit(IntToStr()),
+                  enact.commit(enact.Int(3)))),
+                enact.commit(enact.Response(
+                  enact.commit(IntToStr()),
+                  enact.commit(enact.Str('3')),
+                  None,
+                  False,
+                  []))
+              ))
+            ]),
+          ))
+        )
+
+  def test_invoke_nested_async(self):
+    """Tests basic invocations od nested async invokables."""
+    fun = AsyncWrapper(AsyncWrapper(IntToStr()))
+    with self.store:
+      invocation = asyncio.run(fun.invoke(
+        enact.commit(enact.Int(3))))
+      self.assertEqual(invocation.get_output(), '3')
+
+  def test_invoke_async_with_task(self):
+    """Tests that created tasks are correctly tracked."""
+    fun = AwaitInTask(Sleep())
+    with self.store:
+      invocation = asyncio.run(fun.invoke(
+        enact.commit(enact.Float(0.01))))
+      self.assertAlmostEqual(invocation.get_output(), 0.01, delta=0.01)
+
+  def test_invoke_async_with_runaway_task(self):
+    """Tests that runaway tasks raise an error."""
+    fun = RunawayTasks()
+    with self.store:
+      with self.assertRaises(enact.IncompleteSubinvocationError):
+        asyncio.run(fun.invoke())
+
+  def test_simple_replay_async(self):
+    fun = AsyncRollConcurrentDice()
+    with self.store:
+      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      replay = asyncio.run(invocation.replay_async())
+      self.assertEqual(invocation, replay)
+
+  def test_replay_async(self):
+    """Tests async replays."""
+    fun = AsyncRollConcurrentDice()
+    with self.store:
+      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      rolls = [c.get_output() for c in invocation.get_children()]
+      self.assertEqual(len(rolls), 20)
+
+      # Delete 10 outputs in the middle.
+      with invocation.response.modify() as response:
+        response.output = None
+        for i in range(5, 15):
+          with response.children[i].modify() as child:
+            child.output = None
+
+      invocation = asyncio.run(invocation.replay_async())
+      rerolls = [c.get_output() for c in invocation.get_children()]
+      self.assertEqual(len(rerolls), 20)
+      # Check that the replays are the same as the original rolls.
+
+  def test_replay_async_call(self):
+    """Tests async replays using calls."""
+    fun = AsyncRollConcurrentDice()
+    with self.store:
+      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      with enact.ReplayContext([enact.commit(invocation)]):
+        result = asyncio.run(fun(enact.Int(20)))
+      self.assertEqual(invocation.get_output(), result)
+
+  def test_replay_async_multiple_exceptions(self):
+    """Tests async replays that collect multiple exceptions."""
+    fun = Gather([AsyncFail() for _ in range(10)], True)
+    with self.store:
+      invocation = asyncio.run(fun.invoke())
+      exceptions = [c.get_raised() for c in invocation.get_children()]
+      self.assertEqual(len(exceptions), 10)

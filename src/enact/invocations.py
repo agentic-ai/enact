@@ -14,20 +14,20 @@
 
 """Functionality for invokable resources."""
 
-import abc
 import collections
 import contextlib
 import dataclasses
 import inspect
+import pprint
 import traceback
-from typing import Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, cast
-
+from typing import Any, Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
 
 from enact import contexts
 from enact import interfaces
 from enact import references
 from enact import resources
 from enact import resource_registry
+
 
 C = TypeVar('C', bound=interfaces.ResourceBase)
 E = TypeVar('E', bound='ExceptionResource')
@@ -71,7 +71,7 @@ class InputRequest(ExceptionResource):
 
   def __init__(
       self,
-      invokable: references.Ref['InvokableBase'],
+      invokable: references.Ref['_InvokableBase'],
       input: references.Ref,
       requested_output: Type[interfaces.ResourceBase],
       context: interfaces.FieldValue):
@@ -85,7 +85,7 @@ class InputRequest(ExceptionResource):
       context)
 
   @property
-  def invokable(self) -> references.Ref['InvokableBase']:
+  def invokable(self) -> references.Ref['_InvokableBase']:
     return self.args[0]
 
   @property
@@ -174,7 +174,7 @@ def _request_input(
 @dataclasses.dataclass
 class Request(Generic[I_contra, O_co], resources.Resource):
   """An invocation request."""
-  invokable: references.Ref['InvokableBase[I_contra, O_co]']
+  invokable: references.Ref['_InvokableBase[I_contra, O_co]']
   input: references.Ref[I_contra]
 
 
@@ -182,7 +182,7 @@ class Request(Generic[I_contra, O_co], resources.Resource):
 @dataclasses.dataclass
 class Response(Generic[I_contra, O_co], resources.Resource):
   """An invocation response."""
-  invokable: references.Ref['InvokableBase[I_contra, O_co]']
+  invokable: references.Ref['_InvokableBase[I_contra, O_co]']
   output: Optional[references.Ref[O_co]]
   # Exception raised during call.
   raised: Optional[references.Ref[ExceptionResource]]
@@ -259,7 +259,31 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
       strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replay the invocation, retrying exceptions or overiding them."""
-    return self.request().invokable().invoke(
+    invokable = self.request().invokable()
+    if isinstance(invokable, AsyncInvokableBase):
+      raise InvocationError(
+        'Cannot replay async invocations synchronously. '
+        'Use the "replay_async" coroutine instead.')
+    assert isinstance(invokable, InvokableBase)
+    return invokable.invoke(
+      self.request().input,
+      replay_from=self,
+      exception_override=exception_override,
+      strict=strict)
+
+  async def replay_async(
+      self,
+      exception_override: ExceptionOverride=lambda x: None,
+      strict: bool=True) -> (
+        'Invocation[I_contra, O_co]'):
+    """Replay the invocation, retrying exceptions or overiding them."""
+    invokable = self.request().invokable()
+    if isinstance(invokable, InvokableBase):
+      raise InvocationError(
+        'Cannot replay synchronous invocations asynchronously. '
+        'Use the "replay" function instead.')
+    assert isinstance(invokable, AsyncInvokableBase)
+    return await invokable.invoke(
       self.request().input,
       replay_from=self,
       exception_override=exception_override,
@@ -276,7 +300,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
   def __init__(
       self,
-      subinvocations: Iterable[Invocation[I_contra, O_co]],
+      subinvocations: Iterable[references.Ref[Invocation]],
       exception_override: ExceptionOverride=lambda x: None,
       strict: bool = True):
     """Create a new replay context.
@@ -294,6 +318,8 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     """
     self._exception_override = exception_override
     self._available_children = list(subinvocations)
+    if not all(isinstance(x, references.Ref) for x in self._available_children):
+      assert False
     self._strict = strict
 
   @classmethod
@@ -318,19 +344,44 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
           return call(arg)
     return call(arg)
 
+  @classmethod
+  async def async_call_or_replay(
+      cls, invokable: 'AsyncInvokableBase[I_contra, O_co]', arg: I_contra):
+    """If there is a replay active, try to use it."""
+    context: Optional[ReplayContext[I_contra, O_co]] = (
+      ReplayContext.get_current())
+    call = invokable.call
+    if (isinstance(arg, interfaces.NoneResource) and
+        len(inspect.signature(invokable.call).parameters) == 0):
+      # Allow invokables that take no call args if they accept NoneResources.
+      call = lambda _: invokable.call()  # type: ignore
+
+    if context:
+      replayed_output, child_ctx = context._consume_replay(invokable, arg)
+      if replayed_output is not None:
+        return replayed_output
+      else:
+        with child_ctx:
+          result = await call(arg)
+          return result
+    result = await call(arg)
+    return result
+
   def _consume_replay(
       self,
       invokable: 'InvokableBase[I_contra, O_co]',
       input: I_contra) -> Tuple[Optional[O_co], 'ReplayContext[I_contra, O_co]']:
     """Replay the invocation if possible and return a child context."""
+    request = references.commit(Request(
+      references.commit(invokable),
+      references.commit(input)))
     for i, child in enumerate(self._available_children):
-      if (child.request().invokable == references.commit(invokable) and
-          child.request().input == references.commit(input)):
+      if (child().request == request):
         break
       elif self._strict:
         raise ReplayError(
           f'Expected invocation {invokable}({input}) but got '
-          f'{child.request().invokable()}({child.request().input()}).\n'
+          f'{child().request().invokable()}({child().request().input()}).\n'
           f'Ensure that calls to subinvokable are deterministic '
           f'or use strict=False.')
     else:
@@ -339,21 +390,24 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
     # Consume child invocation
     self._available_children.pop(i)
-    response = child.response()
+    replay_response = child().response()
+    replay_children = replay_response.children
 
     # Replay successful executions.
-    if response.output:
-      invokable.set_from(response.invokable())
-      return response.output(), ReplayContext(
-        list(child.get_children()),
+    if replay_response.output:
+      invokable.set_from(replay_response.invokable())
+      Builder.register_replayed_subinvocations(replay_children)
+      return replay_response.output(), ReplayContext(
+        replay_children,
         self._exception_override,
         self._strict)
 
     # Check for exception override
-    if response.raised and response.raised_here:
-      # Only override exceptions raised in the current frame.
-      override = self._exception_override(response.raised)
-      invokable.set_from(response.invokable())
+    if replay_response.raised and replay_response.raised_here:
+      # We only override exceptions at the point of the stack where they were
+      # originally raised.
+      override = self._exception_override(replay_response.raised)
+      invokable.set_from(replay_response.invokable())
       if override is not None:
         # Typecheck the override.
         output_type = invokable.get_output_type()
@@ -361,18 +415,22 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
           raise InvokableTypeError(
             f'Exception override {override} is not of required type '
             f'{invokable.get_input_type()}.')
+        Builder.register_replayed_subinvocations(replay_children)
         # Set invokable from response.
         return (
           cast(O_co, override),
-          ReplayContext(child.get_children(),
+          ReplayContext(replay_children,
                         self._exception_override,
                         self._strict))
-      # No override found.
-      raise response.raised()
 
     # Trigger reexecution of the invocation.
     return None, ReplayContext(
-      child.get_children(), self._exception_override, self._strict)
+      replay_children,
+      self._exception_override, self._strict)
+
+
+class IncompleteSubinvocationError(InvocationError):
+  """A subinvocation hasn't completed during the call."""
 
 
 @contexts.register
@@ -381,29 +439,66 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
 
   def __init__(
       self,
-      invokable: 'InvokableBase[I_contra, O_co]',
-      input: references.Ref[I_contra]):
+      invokable: '_InvokableBase[I_contra, O_co]',
+      input_resource: references.Ref[I_contra]):
     """Initializes the builder."""
-    self.children: List[references.Ref[Invocation]] = []
-
     self.invokable = invokable
-    self.input_ref = input
+    self.input_ref = input_resource
+
+    self._children: Optional[List[Builder]] = None
+    self._replayed_subinvocations: Optional[
+      List[references.Ref[Invocation]]] = None
     self._request = Request(
-      references.commit(invokable), input)
+      references.commit(invokable), input_resource)
+
     self._invocation: Optional[Invocation] = None
-    self._exceptions_raised_by_children: List[Exception] = []
+    self._parent: Optional[Builder] = self.get_current()
+    if self._parent:
+      self._parent.register_child(self)
+    self.exception_raised: Optional[Exception] = None
 
-  def record_child(self, invocation: Invocation):
-    """Records a subinvocation."""
-    self.children.append(references.commit(invocation))
+  @property
+  def completed(self) -> bool:
+    """Returns true if the invocation is complete."""
+    return self._invocation is not None
 
-  def record_child_exception(self, exception: Exception):
-    """Records a subinvocation."""
-    self._exceptions_raised_by_children.append(exception)
+  def register_child(self, child: 'Builder'):
+    """Registers a subinvocation."""
+    if self._children is None:
+      self._children = []
+    self._children.append(child)
+
+  @classmethod
+  def register_replayed_subinvocations(
+      cls, subinvocations: Iterable[references.Ref[Invocation]]):
+    """Registers a list of subinvocations that were replayed."""
+    builder = cls.get_current()
+    if not builder:
+      return
+    builder._replayed_subinvocations = list(subinvocations)
+
+  def _get_subinvocations(self) -> List[references.Ref[Invocation]]:
+    """Returns the list of subinvocations."""
+    assert (
+      self._replayed_subinvocations is None or self._children is None), (
+      'Cannot have both replayed and non-replayed subinvocations.')
+    if self._replayed_subinvocations is not None:
+      return self._replayed_subinvocations
+    children = self._children or []
+    for i, child in enumerate(children or []):
+      if not child.completed:
+        raise IncompleteSubinvocationError(
+          f'Subinvocation {i} did not complete during invocation of parent:'
+          f' {child.invokable} invoked on'
+          f' {child.input_ref()}')
+    return [references.commit(c.invocation) for c in children]
 
   def _is_child_exception(self, exception: Exception) -> bool:
-    """Records a subinvocation."""
-    return any(exc is exception for exc in self._exceptions_raised_by_children)
+    """Checks if the exception was originally raised by an immediate child."""
+    children = self._children or []
+    assert not self._replayed_subinvocations, (
+      'Subinvocations were replayed, but an exception was raised.')
+    return any(s.exception_raised is exception for s in children)
 
   @property
   def invocation(self) -> Invocation[I_contra, O_co]:
@@ -411,58 +506,120 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       'The "call" function must be called before accessing the invocation.')
     return self._invocation
 
+  def _check_call_valid(
+      self,
+      input_resource: interfaces.ResourceBase):
+    """Checks that the call did not do invalid things."""
+    if references.commit(input_resource) != self.input_ref:
+      raise InputChanged(
+        f'Input changed during invocation of {self.invokable} on input '
+        f'{input_resource}. Only the invokable may change.')
+
+  def _process_output(
+      self,
+      output_resource: Optional[interfaces.ResourceBase],
+      ) -> references.Ref[O_co]:
+    """Process the output and check for errors."""
+    if output_resource is None:
+      output_resource = interfaces.NoneResource()
+    if not isinstance(output_resource, interfaces.ResourceBase):
+      raise InvokableTypeError(
+        f'Invokable {self.invokable} returned {output_resource} '
+        f'which is not a resource.')
+    return cast(references.Ref[O_co], references.commit(output_resource))
+
+  def _wrap_exception(self, exception: Exception) -> ExceptionResource:
+    """Wraps an exception if necessary."""
+    if not isinstance(exception, ExceptionResource):
+      return WrappedException(traceback.format_exc())
+    return exception
+
+  def _create_invocation(
+      self,
+      output_ref: Optional[references.Ref[O_co]],
+      exception: Optional[Exception]):
+    """Process a call result and set the invocation object."""
+    exception_ref: Optional[references.Ref[ExceptionResource]] = None
+    raised_here = False
+    if exception:
+      exception_ref = references.commit(
+        self._wrap_exception(exception))
+      self.exception_raised = exception
+      raised_here = not self._is_child_exception(exception)
+    subinvocations = self._get_subinvocations()
+    response = Response(
+      references.commit(self.invokable), output_ref,
+      exception_ref, raised_here, children=subinvocations)
+    self._invocation = Invocation(
+      references.commit(self._request),
+      references.commit(response))
+
   def call(self) -> O_co:
     """Call the invokable and set self.invocation."""
-    parent: Optional[Builder] = Builder.get_current()
     with self:
-      output: Optional[references.Ref[O_co]] = None
-      exception: Optional[references.Ref[ExceptionResource]] = None
-      python_exc: Optional[Exception] = None
+      exception: Optional[Exception] = None
+      output_ref: Optional[references.Ref[O_co]] = None
       try:
         input_resource = self.input_ref()
         output_resource = ReplayContext.call_or_replay(
           self.invokable, input_resource)
-        if references.commit(input_resource) != self.input_ref:
-          raise InputChanged(
-            f'Input changed during invocation of {self.invokable} on input '
-            f'{input_resource}. Only the invokable may change.')
-        if output_resource is None:
-          output_resource = interfaces.NoneResource()
-        if not isinstance(output_resource, interfaces.ResourceBase):
-          raise InvokableTypeError(
-            f'Invokable {self.invokable} returned {output_resource} '
-            f'which is not a resource.')
-        output = cast(references.Ref[O_co], references.commit(output_resource))
-      except ExceptionResource as e:
-        python_exc = e
-        exception = references.commit(e)
-        raise
+        self._check_call_valid(input_resource)
+        output_ref = self._process_output(output_resource)
       except Exception as e:
-        python_exc = e
-        exception = references.commit(WrappedException(traceback.format_exc()))
+        exception = e
         raise
       finally:
-        raised_here = False
-        if python_exc:
-          if parent:
-            parent.record_child_exception(python_exc)
-          raised_here = not self._is_child_exception(python_exc)
-        response = Response(
-          references.commit(self.invokable), output,
-          exception, raised_here, self.children)
-        self._invocation = Invocation(
-          references.commit(self._request),
-          references.commit(response))
-        if parent:
-          parent.record_child(self._invocation)
+        self._create_invocation(output_ref, exception)
+      return cast(O_co, output_resource)
+
+  async def async_call(self) -> O_co:
+    """Call the async invokable and set self.invocation."""
+    with self:
+      exception: Optional[Exception] = None
+      output_ref: Optional[references.Ref[O_co]] = None
+      try:
+        input_resource = self.input_ref()
+        output_resource = await ReplayContext.async_call_or_replay(
+          self.invokable, input_resource)
+        self._check_call_valid(input_resource)
+        output_ref = self._process_output(output_resource)
+      except Exception as e:
+        exception = e
+        raise
+      finally:
+        self._create_invocation(output_ref, exception)
       return cast(O_co, output_resource)
 
 
-class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
-  """Base class for invokable resources."""
+def resolve_resource(
+    resource_type: Optional[Type[C]],
+    *args, **kwargs):
+  """Resolves resource from arguments."""
+  input_type = resource_type
+  if (len(args) != 1 or kwargs or
+      not all(isinstance(arg, interfaces.ResourceBase) for arg in args) or
+      not all(isinstance(arg, interfaces.ResourceBase) for arg in kwargs.values())):
+    if input_type:
+      # Attempts to create a resource of the input type.
+      arg = input_type(*args, **kwargs)
+    else:
+      raise InvokableTypeError(
+        f'Untyped invokables must be called with a single resource argument, '
+        f'got args={args} and kwargs={kwargs}.')
+  else:
+    arg = args[0]
 
+  if input_type and not isinstance(arg, input_type):
+    raise InvokableTypeError(
+      f'Input type {type(arg).__qualname__} does not match '
+      f'{input_type.__qualname__}.')
+  return arg
+
+
+class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
+  """Base class for sync / async invokable resources."""
   _input_type: Optional[Type[I_contra]] = None
-  _output_type: Optional[Type[I_contra]] = None
+  _output_type: Optional[Type[O_co]] = None
 
   @classmethod
   def get_input_type(cls) -> Optional[Type[I_contra]]:
@@ -474,31 +631,45 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """Returns the type of the output if known."""
     return cls._output_type
 
-  @abc.abstractmethod
+  @staticmethod
+  def _process_invoke_arg(
+      arg: Optional[references.Ref[I_contra]]) -> (
+        references.Ref[I_contra]):
+    """Processes an invocation argument."""
+    if arg is None:
+      arg = cast(references.Ref[I_contra],
+                 references.commit(interfaces.NoneResource()))
+    if not isinstance(arg, references.Ref):
+      raise InvokableTypeError('Input must be a reference.')
+    return arg
+
+  @staticmethod
+  def _invoke_exit_stack(
+      replay_from: Optional[Invocation[I_contra, O_co]]=None,
+      exception_override: ExceptionOverride=lambda _: None,
+      strict: bool=False) -> contextlib.ExitStack():
+    """Creates an exit stack for invoking an invokable."""
+    exit_stack = contextlib.ExitStack()
+    # Execute in a top-level context to ensure that there are no parents.
+    exit_stack.enter_context(Builder.top_level())
+    if replay_from:
+      exit_stack.enter_context(ReplayContext.top_level())
+      exit_stack.enter_context(ReplayContext(
+        [references.commit(replay_from)],
+        exception_override, strict))
+    return exit_stack
+
+
+class InvokableBase(_InvokableBase[I_contra, O_co]):
+  """Base class for invokable resources."""
+
   def call(self, resource: I_contra) -> O_co:
     """Executes the invokable."""
+    raise NotImplementedError()
 
   def __call__(self, *args, **kwargs) -> O_co:
     """Executes the invokable, tracking invocation metadata."""
-    input_type = self.get_input_type()
-    if (len(args) != 1 or kwargs or
-        not all(isinstance(arg, interfaces.ResourceBase) for arg in args) or
-        not all(isinstance(arg, interfaces.ResourceBase) for arg in kwargs.values())):
-      if input_type:
-        # Attempts to create a resource of the input type.
-        arg = input_type(*args, **kwargs)
-      else:
-        raise InvokableTypeError(
-          f'Untyped invokables must be called with a single resource argument, '
-          f'got args={args} and kwargs={kwargs}.')
-    else:
-      arg = args[0]
-
-    if input_type and not isinstance(arg, input_type):
-      raise InvokableTypeError(
-        f'Input type {type(arg).__qualname__} does not match '
-        f'{input_type.__qualname__}.')
-
+    arg = resolve_resource(self.get_input_type(), *args, **kwargs)
     parent: Optional[Builder] = Builder.get_current()
 
     # Execution not tracked, so just call the invokable.
@@ -507,10 +678,6 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
 
     builder = Builder(self, references.commit(arg))
     output = builder.call()
-    output_type = self.get_output_type()
-    if output_type and not isinstance(output, output_type):
-      raise InvokableTypeError(
-        f'Output type {type(output)} does not match {output_type}.')
     return output
 
   def invoke(
@@ -535,21 +702,9 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     Returns:
       The invocation generated.
     """
-    if arg is None:
-      arg = cast(references.Ref[I_contra],
-                 references.commit(interfaces.NoneResource()))
-    if not isinstance(arg, references.Ref):
-      raise InvokableTypeError('Input must be a reference.')
+    arg = self._process_invoke_arg(arg)
 
-    exit_stack = contextlib.ExitStack()
-    # Execute in a top-level context to ensure that there are no parents.
-    exit_stack.enter_context(Builder.top_level())
-    if replay_from:
-      exit_stack.enter_context(ReplayContext.top_level())
-      exit_stack.enter_context(ReplayContext(
-        [replay_from], exception_override, strict))
-
-    with exit_stack:
+    with self._invoke_exit_stack(replay_from, exception_override, strict):
       builder = Builder(self, arg)
       try:
         builder.call()
@@ -557,7 +712,69 @@ class InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
         if raise_on_invocation_error:
           raise
       except Exception:
-        pass  # Do nothing
+        if not builder.completed:
+          raise
+      invocation = builder.invocation
+    if commit:
+      references.commit(invocation)
+    return invocation
+
+
+class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
+  """Base class for invokable resources."""
+
+  async def call(self, resource: I_contra) -> O_co:
+    """Executes the async invokable."""
+    raise NotImplementedError()
+
+  async def __call__(self, *args, **kwargs) -> O_co:
+    """Executes the async invokable, tracking invocation metadata."""
+    arg = resolve_resource(self.get_input_type(), *args, **kwargs)
+    parent: Optional[Builder] = Builder.get_current()
+
+    # Execution not tracked, so just call the invokable.
+    if not parent:
+      result = await ReplayContext.async_call_or_replay(self, arg)
+      return result
+
+    builder = Builder(self, references.commit(arg))
+    output = await builder.async_call()
+    return output
+
+  async def invoke(
+      self,
+      arg: Optional[references.Ref[I_contra]]=None,
+      replay_from: Optional[Invocation[I_contra, O_co]]=None,
+      exception_override: ExceptionOverride=lambda _: None,
+      raise_on_invocation_error:bool=True,
+      strict: bool=True,
+      commit: bool=True) -> Invocation[I_contra, O_co]:
+    """Invoke the invokable, tracking invocation metadata.
+
+    Args:
+      arg: The input resource.
+      replay_from: An optional invocation to replay form.
+      exception_override: If replaying, an optional override for replayed
+        exceptions.
+      raise_on_invocation_error: Whether invocation errors should be reraised.
+      strict: Whether replay should fail if the replayed invocation
+        does not match the current invocation.
+      commit: Whether to commit the new invocation object.
+    Returns:
+      The invocation generated.
+    """
+    arg = self._process_invoke_arg(arg)
+
+    with self._invoke_exit_stack(replay_from, exception_override, strict):
+      builder = Builder(self, arg)
+      try:
+        await builder.async_call()
+      except InvocationError:
+        if raise_on_invocation_error:
+          raise
+      except Exception:
+        if not builder.completed:
+          raise
       invocation = builder.invocation
     if commit:
       references.commit(invocation)
@@ -569,7 +786,12 @@ class Invokable(InvokableBase[I_contra, O_co], resources.Resource):
   """Base class for dataclass-based invokable resources."""
 
 
-I = TypeVar('I', bound=InvokableBase)
+@dataclasses.dataclass
+class AsyncInvokable(AsyncInvokableBase[I_contra, O_co], resources.Resource):
+  """Base class for dataclass-based async invokable resources."""
+
+
+I = TypeVar('I', bound=_InvokableBase)
 
 
 def typed_invokable(
@@ -580,7 +802,7 @@ def typed_invokable(
   """A decorator for creating typed invokables."""
   def _decorator(cls: Type[I]) -> Type[I]:
     """Decorates a class as a typed invokable."""
-    if not issubclass(cls, InvokableBase):
+    if not issubclass(cls, _InvokableBase):
       raise TypeError('Invokable must be a subclass of InvokableBase.')
     cls._input_type = input_type
     cls._output_type = output_type
@@ -635,6 +857,11 @@ class InvocationGenerator(
       input: Optional[references.Ref[I_contra]]=None,
       from_invocation: Optional[Invocation[I_contra, O_co]]=None):
     """Initializes an interactive invocation."""
+    if invokable and not isinstance(invokable, InvokableBase):
+      if isinstance(invokable, AsyncInvokableBase):
+        raise TypeError(
+          'AsyncInvokables cannot be used with InvocationGenerator.')
+      raise TypeError('Invokable must be a child of SyncInvokableBase.')
     if from_invocation is not None and invokable is not None:
       raise ValueError(
         'Cannot specify both an invokable and an invocation.')
