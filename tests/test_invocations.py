@@ -567,11 +567,11 @@ class InvocationsTest(unittest.TestCase):
 class AsyncWrapper(enact.AsyncInvokable):
   """An async wrapper for a sync invokable."""
   fun: enact._InvokableBase
-  async def call(self, value: enact.ResourceBase):
+  async def call(self, *args):
     if isinstance(self.fun, enact.InvokableBase):
-      return self.fun(value)
+      return self.fun(*args)
     elif isinstance(self.fun, enact.AsyncInvokable):
-      return await self.fun(value)
+      return await self.fun(*args)
 
 @enact.typed_invokable(enact.Float, enact.Float)
 @dataclasses.dataclass
@@ -630,15 +630,15 @@ class AsyncFail(enact.AsyncInvokable):
 @dataclasses.dataclass
 class Gather(enact.AsyncInvokable):
   invokables: List
-  return_exceptions: bool
 
   async def call(self):
     results = await asyncio.gather(
-      *[i() for i in self.invokables],
-      return_exceptions=self.return_exceptions)
-    if any(isinstance(r, Exception) for r in results):
-      raise ValueError('Got exception in Gather')
-    return results
+      *[i(enact.NoneResource()) for i in self.invokables],
+      return_exceptions=True)
+    for r in results:
+      if isinstance(r, Exception):
+        raise r
+    return enact.List(results)
 
 
 class AsyncInvocationsTest(unittest.TestCase):
@@ -748,8 +748,37 @@ class AsyncInvocationsTest(unittest.TestCase):
 
   def test_replay_async_multiple_exceptions(self):
     """Tests async replays that collect multiple exceptions."""
-    fun = Gather([AsyncFail() for _ in range(10)], True)
+    fun = Gather([AsyncFail() for _ in range(10)])
     with self.store:
       invocation = asyncio.run(fun.invoke())
       exceptions = [c.get_raised() for c in invocation.get_children()]
       self.assertEqual(len(exceptions), 10)
+
+  def test_continue_invocation_async(self):
+    """Tests that input requests can be continued."""
+    # Request ten integers.
+    fun = Gather([AsyncWrapper(enact.RequestInput(enact.Int))
+                  for _ in range(10)])
+    with self.store:
+      invocation = asyncio.run(fun.invoke(enact.commit(enact.NoneResource())))
+      input_request = invocation.get_raised()
+      assert isinstance(input_request, enact.InputRequest)
+      invocation = asyncio.run(input_request.continue_invocation_async(
+        invocation, enact.Int(2)))
+      self.assertEqual(
+        invocation.get_output(),
+        [enact.Int(2) for _ in range(10)])
+
+  def test_continue_invocation_async_targeted(self):
+    """Tests that input requests can be continued with different values."""
+    fun = Gather([AsyncWrapper(enact.RequestInput(enact.Int, i))
+                  for i in range(10)])
+    with self.store:
+      invocation = asyncio.run(fun.invoke(enact.commit(enact.NoneResource())))
+      self.assertIsInstance(invocation.get_raised(), enact.InputRequest)
+      def exception_override(exception_ref):
+        input_request = exception_ref()
+        assert isinstance(input_request, enact.InputRequest)
+        return enact.Int(input_request.context + 1)
+      invocation = asyncio.run(invocation.replay_async(exception_override))
+      self.assertEqual(invocation.get_output(), list(range(1, 11)))
