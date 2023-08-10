@@ -18,7 +18,6 @@ import collections
 import contextlib
 import dataclasses
 import inspect
-import pprint
 import traceback
 from typing import Any, Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
 
@@ -113,6 +112,19 @@ class InputRequest(ExceptionResource):
         return value
       return None
     return invocation.replay(
+      exception_override=_exception_override, strict=strict)
+
+  async def continue_invocation_async(
+      self,
+      invocation: 'Invocation[I_contra, O_co]',
+      value: interfaces.ResourceBase,
+      strict: bool=True):
+    ref = references.commit(self)
+    def _exception_override(exception_ref: references.Ref[ExceptionResource]):
+      if exception_ref == ref:
+        return value
+      return None
+    return await invocation.replay_async(
       exception_override=_exception_override, strict=strict)
 
 
