@@ -26,6 +26,7 @@ class SimpleContext(contexts.Context):
   """A context object for testing."""
 
   def __init__(self):
+    super().__init__()
     self.depth: Optional[int] = None
 
   def enter(self):

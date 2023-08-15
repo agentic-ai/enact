@@ -82,7 +82,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
     return self._digest
 
   @property
-  def id(self) -> str:
+  def id(self) -> str:  # pylint: disable=invalid-name
     """Returns a string version of this reference."""
     return json.dumps(dict(self.field_items()), sort_keys=True)
 
@@ -91,10 +91,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
     return hash(self.id)
 
   @classmethod
-  def from_id(cls: Type[P], id: str) -> P:
+  def from_id(cls: Type[P], ref_id: str) -> P:
     """Returns a string version of this reference."""
     return cls.from_resource_dict(
-      interfaces.ResourceDict(cls, **json.loads(id)))
+      interfaces.ResourceDict(cls, **json.loads(ref_id)))
 
   @contextlib.contextmanager
   def modify(self) -> Iterator[R]:
@@ -128,7 +128,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
     """Returns true if the referenced object is the same."""
     if not isinstance(other, Ref):
       return False
-    if type(self) != type(other):
+    if type(self) != type(other):  # pylint: disable=unidiomatic-typecheck
       other = self.from_resource(other.checkout())
     return self.digest == other.digest
 
@@ -182,6 +182,13 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   def __repr__(self) -> str:
     return f'<{type(self).__name__}: {self.digest}>'
+
+  def set_from(self, other: Any):
+    """Sets the fields of this resource from another resource."""
+    if type(other) != type(self):  # pylint: disable=unidiomatic-typecheck
+      raise ValueError(f'Cannot set {self} from {other}: types do not match.')
+    self._digest = other._digest  # pylint: disable=protected-access
+    self._cached = other._cached  # pylint: disable=protected-access
 
 
 class StorageBackend(abc.ABC):
@@ -261,8 +268,8 @@ class FileBackend(StorageBackend):
   def commit(self, packed_resource: PackedResource):
     """Stores a packed resource."""
     packed_resource.ref.verify(packed_resource)
-    with open(self._get_path(packed_resource.ref), 'wb') as f:
-      f.write(self._serializer.serialize(
+    with open(self._get_path(packed_resource.ref), 'wb') as file:
+      file.write(self._serializer.serialize(
         packed_resource.data))
 
   def has(self, ref: Ref) -> bool:
@@ -271,8 +278,8 @@ class FileBackend(StorageBackend):
 
   def checkout(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
     """Returns the packed resource or None if not available."""
-    with open(self._get_path(ref), 'rb') as f:
-      return self._serializer.deserialize(f.read())
+    with open(self._get_path(ref), 'rb') as file:
+      return self._serializer.deserialize(file.read())
 
 
 @contexts.register
@@ -309,11 +316,13 @@ class Store(contexts.Context):
     return ref.unpack(packed_resource)
 
 
+# pylint: disable=invalid-name
 def InMemoryStore() -> Store:
   """Returns an in-memory store."""
   return Store(backend=InMemoryBackend())
 
 
+# pylint: disable=invalid-name
 def FileStore(root_dir: str):
   """Returns a file-based store."""
   return Store(backend=FileBackend(root_dir))

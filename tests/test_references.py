@@ -24,6 +24,7 @@ from enact import references
 from enact import serialization
 from enact import contexts
 
+# pylint: disable=invalid-name,missing-class-docstring
 
 @enact.register
 @dataclasses.dataclass
@@ -54,7 +55,8 @@ class JsonPackedRef(enact.Ref):
     if not issubclass(data.type, JsonPackedResource):
       raise enact.RefError('Resource is not a JsonPackedResource.')
     json_packed = data.type.from_resource_dict(data)
-    unpacked_dict = serialization.JsonSerializer().deserialize(json_packed.contents)
+    unpacked_dict = serialization.JsonSerializer().deserialize(
+      json_packed.contents)
     return unpacked_dict.to_resource()
 
   @classmethod

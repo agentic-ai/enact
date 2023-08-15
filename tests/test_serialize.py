@@ -26,6 +26,7 @@ import random_value
 @enact.register
 @dataclasses.dataclass
 class AllTypesResource(enact.Resource):
+  """A resource that contains all valid field types."""
   i: int
   f: float
   bl: bool
@@ -52,7 +53,7 @@ class JsonSerializerTest(unittest.TestCase):
     self.registry.register(AllTypesResource)
     resource = AllTypesResource(
       i=2, f=3.0, bl=True, b=b'bytes', s='test', n=None,
-      r=enact.Ref("12314"), m={'a': ['test']}, l=[{'b': 1}, {'c': 2}],
+      r=enact.Ref('12314'), m={'a': ['test']}, l=[{'b': 1}, {'c': 2}],
       t=AllTypesResource)
     got = self.serializer.serialize(resource.to_resource_dict())
     deserialized = self.serializer.deserialize(got).to_resource()

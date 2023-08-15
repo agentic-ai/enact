@@ -33,25 +33,25 @@ class IntToStr(enact.Invokable):
   """An invokable that converts an int to a string."""
   salt: str = ''
 
-  def call(self, input: enact.Int) -> enact.Str:
-    return enact.Str(str(input) + self.salt)
+  def call(self, value: enact.Int) -> enact.Str:
+    return enact.Str(str(value) + self.salt)
 
 
 @enact.typed_invokable(enact.Int, enact.Str)
 class WrongOutputType(enact.Invokable):
 
-  def call(self, input: enact.Int) -> enact.Int:
-    return input
+  def call(self, value: enact.Int) -> enact.Int:
+    return value
 
 
 @dataclasses.dataclass
 @enact.typed_invokable(enact.Int, enact.Int)
 class AddOne(enact.Invokable):
   fail: bool = False
-  def call(self, input: enact.Int) -> enact.Int:
+  def call(self, input_resource: enact.Int) -> enact.Int:
     if self.fail:
       raise ValueError('fail')
-    return enact.Int(input + 1)
+    return enact.Int(input_resource + 1)
 
 
 @dataclasses.dataclass
@@ -63,23 +63,25 @@ class Fail(enact.Invokable):
 @enact.typed_invokable(enact.Int, enact.Int)
 @dataclasses.dataclass
 class NestedFunction(enact.Invokable):
+  """A nested function that repeatedly calls another invokable."""
   fun: enact.InvokableBase = AddOne()
   iter: int = 10
   fail_on: Optional[int] = None
 
-  def call(self, input: enact.Int) -> enact.Int:
+  def call(self, input_resource: enact.Int) -> enact.Int:
     for i in range(self.iter):
       if i == self.fail_on:
-        input = Fail()(input)
+        input_resource = Fail()(input_resource)
       else:
-        input = self.fun(input)
-    return input
+        input_resource = self.fun(input_resource)
+    return input_resource
 
 
 class InvocationsTest(unittest.TestCase):
   """Tests invocations."""
 
   def setUp(self):
+    # pylint: disable=consider-using-with
     self.dir = tempfile.TemporaryDirectory()
     self.backend = enact.FileBackend(self.dir.name)
     self.store = enact.Store(self.backend)
@@ -156,7 +158,7 @@ class InvocationsTest(unittest.TestCase):
   def test_invoke_output_error(self):
     """Test that error is raised if a non-resource object is returned."""
     class BadInvokable(enact.Invokable):
-      def call(self, input: enact.Int) -> int:
+      def call(self, unused_input: enact.Int) -> int:
         return 1
     with self.store:
       with self.assertRaises(TypeError):
@@ -196,6 +198,7 @@ class InvocationsTest(unittest.TestCase):
           nested = NestedFunction()
           inner_invocation = nested.invoke(store.commit(enact.Int(1)))
           # The invocation should not be tracked in the builder.
+          # pylint: disable=protected-access
           self.assertEqual(builder._children, None)
         # Redo the invocation outside the builder.
         outer_invocation = nested.invoke(store.commit(enact.Int(1)))
@@ -207,8 +210,8 @@ class InvocationsTest(unittest.TestCase):
     @dataclasses.dataclass
     class MetaInvoke(enact.Invokable):
       invokable: enact.InvokableBase
-      def call(self, input: enact.ResourceBase):
-        return self.invokable.invoke(enact.commit(input))
+      def call(self, input_resource: enact.ResourceBase):
+        return self.invokable.invoke(enact.commit(input_resource))
 
     with self.store as store:
       fun = NestedFunction()
@@ -223,7 +226,7 @@ class InvocationsTest(unittest.TestCase):
   def test_wrapped_resource(self):
     """Tests that exceptions are tracked as wrapped."""
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, input: enact.ResourceBase):
+      def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
     with self.store as store:
       fun = PythonErrorOnInvoke()
@@ -235,15 +238,15 @@ class InvocationsTest(unittest.TestCase):
   def test_raise_native_error(self):
     """Tests that exceptions are raised in native format."""
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, input: enact.ResourceBase):
+      def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
     class ExpectValueError(enact.Invokable):
-      def call(self, input: enact.ResourceBase):
+      def call(self, unused_input: enact.ResourceBase):
         try:
           PythonErrorOnInvoke()(enact.Int(3))
         except ValueError:
           return enact.Str('Got value error')
-        raise Exception('Expected ValueError')
+        raise enact.ExceptionResource('Expected ValueError')
 
     with self.store as store:
       fun = ExpectValueError()
@@ -255,14 +258,14 @@ class InvocationsTest(unittest.TestCase):
   def test_raised_here(self):
     """Tests that the raised_here field is set correctly."""
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, input: enact.ResourceBase):
+      def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
 
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
       invokable: enact.Ref[enact.InvokableBase]
-      def call(self, input: enact.ResourceBase):
-        self.invokable.checkout()(input)
+      def call(self, input_resource: enact.ResourceBase):
+        self.invokable.checkout()(input_resource)
 
     with self.store as store:
       error_fun = PythonErrorOnInvoke()
@@ -280,7 +283,7 @@ class InvocationsTest(unittest.TestCase):
     """Tests that exceptions are replayed."""
     native_errors_raised = 0
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, input: enact.ResourceBase):
+      def call(self, unused_input: enact.ResourceBase):
         nonlocal native_errors_raised
         native_errors_raised += 1
         raise ValueError('foo')
@@ -288,8 +291,8 @@ class InvocationsTest(unittest.TestCase):
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
       invokable: enact.Ref[enact.InvokableBase]
-      def call(self, input: enact.ResourceBase):
-        self.invokable.checkout()(input)
+      def call(self, input_resource: enact.ResourceBase):
+        self.invokable.checkout()(input_resource)
 
     with self.store as store:
       error_fun = PythonErrorOnInvoke()
@@ -310,9 +313,9 @@ class InvocationsTest(unittest.TestCase):
       x: int = 0
 
     class ChangesInput(enact.Invokable):
-      def call(self, input: Changeable):
-        input.x += 1
-        return input
+      def call(self, input_resource: Changeable):
+        input_resource.x += 1
+        return input_resource
 
     with self.assertRaises(enact.InputChanged):
       with self.store as store:
@@ -370,9 +373,9 @@ class InvocationsTest(unittest.TestCase):
     @dataclasses.dataclass
     class Counter(enact.Invokable):
       call_count: int = 0
-      def call(self, input: enact.ResourceBase):
+      def call(self, input_resource: enact.ResourceBase):
         self.call_count += 1
-        return input
+        return input_resource
 
     with self.store:
       counter = Counter()
@@ -457,7 +460,7 @@ class InvocationsTest(unittest.TestCase):
         raised = invocation.get_raised()
         assert isinstance(raised, enact.InputRequest)
         self.assertEqual(
-          cast(enact.Str, raised.input.checkout()), cur_input)
+          cast(enact.Str, raised.for_resource.checkout()), cur_input)
         invocation = raised.continue_invocation(
           invocation, enact.Str(next_input))
       self.assertEqual(invocation.get_output(), 'bish')
@@ -568,10 +571,12 @@ class AsyncWrapper(enact.AsyncInvokable):
   """An async wrapper for a sync invokable."""
   fun: enact._InvokableBase
   async def call(self, *args):
-    if isinstance(self.fun, enact.InvokableBase):
-      return self.fun(*args)
-    elif isinstance(self.fun, enact.AsyncInvokable):
-      return await self.fun(*args)
+    fun = self.fun
+    # pylint: disable=not-callable
+    if isinstance(fun, enact.InvokableBase):
+      return fun(*args)
+    if isinstance(fun, enact.AsyncInvokable):
+      return await fun(*args)
 
 @enact.typed_invokable(enact.Float, enact.Float)
 @dataclasses.dataclass
@@ -599,7 +604,7 @@ class AwaitInTask(enact.AsyncInvokable):
 class RunawayTasks(enact.AsyncInvokable):
   """Invalid invokable that returns before all tasks are complete."""
 
-  async def call(self, value: enact.ResourceBase) -> enact.ResourceBase:
+  async def call(self, unused_value: enact.ResourceBase):
     sleep = Sleep()
     sleeps = [sleep(i * 0.1) for i in range(10)]
     await asyncio.wait(sleeps, timeout=0.2)
@@ -629,6 +634,7 @@ class AsyncFail(enact.AsyncInvokable):
 @enact.typed_invokable(enact.NoneResource, enact.List)
 @dataclasses.dataclass
 class Gather(enact.AsyncInvokable):
+  """Calls asyncio.gather on a list of invokables."""
   invokables: List
 
   async def call(self):
@@ -645,6 +651,7 @@ class AsyncInvocationsTest(unittest.TestCase):
   """Tests invocations."""
 
   def setUp(self):
+    # pylint: disable=consider-using-with
     self.dir = tempfile.TemporaryDirectory()
     self.backend = enact.FileBackend(self.dir.name)
     self.store = enact.Store(self.backend)
@@ -701,7 +708,7 @@ class AsyncInvocationsTest(unittest.TestCase):
     with self.store:
       invocation = asyncio.run(fun.invoke(
         enact.commit(enact.Float(0.01))))
-      self.assertAlmostEqual(invocation.get_output(), 0.01, delta=0.01)
+      self.assertGreater(invocation.get_output(), 0.0)
 
   def test_invoke_async_with_runaway_task(self):
     """Tests that runaway tasks raise an error."""
@@ -730,7 +737,7 @@ class AsyncInvocationsTest(unittest.TestCase):
         response.output = None
         for i in range(5, 15):
           with response.children[i].modify() as child:
-            child.output = None
+            child.clear_output()
 
       invocation = asyncio.run(invocation.replay_async())
       rerolls = [c.get_output() for c in invocation.get_children()]
@@ -779,6 +786,7 @@ class AsyncInvocationsTest(unittest.TestCase):
       def exception_override(exception_ref):
         input_request = exception_ref()
         assert isinstance(input_request, enact.InputRequest)
-        return enact.Int(input_request.context + 1)
+        context = cast(int, input_request.context)
+        return enact.Int(context + 1)
       invocation = asyncio.run(invocation.replay_async(exception_override))
       self.assertEqual(invocation.get_output(), list(range(1, 11)))

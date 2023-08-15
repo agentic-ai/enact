@@ -65,6 +65,7 @@ class ResourceTest(unittest.TestCase):
     class R(enact.Resource):
       a: Any
     type_id = R.type_id()
+    # pylint: disable=function-redefined
     @dataclasses.dataclass
     class R(enact.Resource):  # type: ignore
       b: Any
@@ -76,6 +77,7 @@ class ResourceTest(unittest.TestCase):
     class R(enact.Resource):
       a: Any
     type_id = R.type_id()
+    # pylint: disable=function-redefined
     @dataclasses.dataclass
     class R(enact.Resource):  # type: ignore
       a: Any
