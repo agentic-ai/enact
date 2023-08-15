@@ -15,10 +15,13 @@
 """References and stores."""
 
 import abc
+import base64
 import contextlib
 import json
 import os
-from typing import Any, Dict, Generic, Iterable, Iterator, Mapping, NamedTuple, Optional, Type, TypeVar, cast
+from typing import (
+  Any, Dict, Generic, Iterable, Iterator, Mapping, NamedTuple, Optional, Type,
+  TypeVar, cast)
 
 from enact import contexts
 from enact import digests
@@ -173,9 +176,9 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   @classmethod
   def from_fields(cls: Type[P],
-                  field_values: Mapping[str, interfaces.FieldValue]) -> P:
+                  field_dict: Mapping[str, interfaces.FieldValue]) -> P:
     """Constructs the resource from a value dictionary."""
-    return cls(**field_values)  # type: ignore
+    return cls(**field_dict)  # type: ignore
 
   def __repr__(self) -> str:
     return f'<{type(self).__name__}: {self.digest}>'
@@ -231,26 +234,44 @@ class FileBackend(StorageBackend):
 
   def __init__(self,
                root_dir: str,
-               serializer: Optional[serialization.Serializer] = None):
-    """Create a new in-memory backend."""
+               serializer: Optional[serialization.Serializer] = None,
+               use_base64_names: bool=True):
+    """Create a new in-memory backend.
+
+    Args:
+      root_dir: The directory where resources will be stored.
+      serialized: The serializer to use. Will default to JsonSerializer if not
+        provided.
+      use_base64_names: Use base64 encoded filenames for resources. This is
+        useful on windows, since windows does not allow certain characters in
+        file names.
+    """
     os.makedirs(root_dir, exist_ok=True)
     self._root_dir = root_dir
     self._serializer = serializer or serialization.JsonSerializer()
+    self._use_base64_names = use_base64_names
+
+  def _get_path(self, ref: Ref) -> str:
+    if self._use_base64_names:
+      basename = base64.b64encode(ref.id.encode('utf-8')).decode('utf-8')
+    else:
+      basename = ref.id
+    return os.path.join(self._root_dir, basename)
 
   def commit(self, packed_resource: PackedResource):
     """Stores a packed resource."""
     packed_resource.ref.verify(packed_resource)
-    with open(os.path.join(self._root_dir, packed_resource.ref.id), 'wb') as f:
+    with open(self._get_path(packed_resource.ref), 'wb') as f:
       f.write(self._serializer.serialize(
         packed_resource.data))
 
   def has(self, ref: Ref) -> bool:
     """Returns whether the backend has the referenced resource."""
-    return os.path.exists(os.path.join(self._root_dir, ref.id))
+    return os.path.exists(self._get_path(ref))
 
   def checkout(self, ref: Ref) -> Optional[interfaces.ResourceDict]:
     """Returns the packed resource or None if not available."""
-    with open(os.path.join(self._root_dir, ref.id), 'rb') as f:
+    with open(self._get_path(ref), 'rb') as f:
       return self._serializer.deserialize(f.read())
 
 
@@ -264,6 +285,7 @@ class Store(contexts.Context):
       registry: Optional[resource_registry.Registry]=None,
       ref_type: Type[Ref]=Ref):
     """Initializes the store."""
+    super().__init__()
     self._backend = backend or InMemoryBackend()
     self._registry = registry
     self._ref_type = ref_type
