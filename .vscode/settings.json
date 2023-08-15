@@ -10,12 +10,15 @@
     "python.testing.unittestEnabled": true,
     "python.linting.enabled": true,
     "python.linting.pylintArgs": [
-        "--indent-string=\"  \""
+        "--indent-string=\"  \"",
+        "--rcfile=./pylintrc"
     ],
     "python.linting.mypyArgs": [
         "--check-untyped-defs"
     ],
+    "python.linting.mypyEnabled": true,
+    "python.linting.mypyCategorySeverity.note": "Error",
     "files.exclude": {
         "build/**": true
-    }
+    },
 }
