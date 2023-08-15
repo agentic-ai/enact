@@ -19,7 +19,7 @@ import unittest
 from enact import digests
 from enact import interfaces
 
-import tests.random_value as random_value
+from tests import random_value
 
 
 class DigestTest(unittest.TestCase):

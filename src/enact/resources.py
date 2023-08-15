@@ -63,7 +63,7 @@ class Resource(interfaces.ResourceBase):
     Implementation of set_from is required to support replays of invokable
     resources that change their internal state during execution.
     """
-    if not type(self) == type(other):
+    if not type(self) is type(other):  # pylint: disable=unidiomatic-typecheck
       raise TypeError(f'Cannot set_from {type(other)} into {type(self)}.')
     copy = other.deep_copy_resource()
     for field in dataclasses.fields(self):

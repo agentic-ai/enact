@@ -544,7 +544,7 @@ class GUI:
           return updates
 
         # Try and display the exception causing input to the user.
-        output_to_user = cast(interfaces.ResourceBase, exception.input())
+        output_to_user = cast(interfaces.ResourceBase, exception.for_resource())
         requested_input_from_user_type = exception.requested_type
         updates = []
         found_output_to_user_widget = update_input_required_widgets(

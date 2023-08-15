@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Pretty-printing for resources and references."""
 
 import dataclasses
 from typing import Callable, List, Mapping, Optional, Sequence, Set, Tuple, Type
@@ -51,7 +52,7 @@ class PPrinter:
     self.skip_repeated_refs = skip_repeated_refs
     self._seen_refs: Set[str] = set()
 
-  def from_type(self, v: interfaces.FieldValue, depth: int) -> PPValue:
+  def from_type(self, v: interfaces.FieldValue, unused_depth: int) -> PPValue:
     assert isinstance(v, type)
     assert issubclass(v, interfaces.ResourceBase), (
       'Only types that are subclasses of ResourceBase are supported.')
@@ -88,7 +89,7 @@ class PPrinter:
     result = PPValue(
       value=type(v).__name__,
       contents=[
-        PPValue(field_name, [self.pvalue(field_value, depth + 1)], open=":")
+        PPValue(field_name, [self.pvalue(field_value, depth + 1)], open=':')
         for field_name, field_value in v.field_items()],
       open=':',
       close='')
@@ -105,7 +106,8 @@ class PPrinter:
     self._seen_refs.add(v.digest)
     return result
 
-  def from_primitive(self, v: interfaces.FieldValue, depth: int) -> PPValue:
+  def from_primitive(
+      self, v: interfaces.FieldValue, unused_depth: int) -> PPValue:
     assert isinstance(v, interfaces.PRIMITIVES)
     return PPValue(self.primitive_to_str(v), [])
 

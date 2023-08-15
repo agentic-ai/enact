@@ -49,5 +49,6 @@ class TestResourceTypes(unittest.TestCase):
         ref2 = self.store.commit(ref.checkout())
         self.assertEqual(ref, ref2)
 
-        for v1, v2 in zip(resource.field_values(), ref2.checkout().field_values()):
+        for v1, v2 in zip(resource.field_values(),
+                          ref2.checkout().field_values()):
           self.assertEqual(v1, v2)

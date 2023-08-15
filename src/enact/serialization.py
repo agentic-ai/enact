@@ -66,7 +66,7 @@ class JsonSerializer(Serializer):
     return f'{self._ESCAPE}{s}'
 
   def to_json(self, value: interfaces.ResourceDictValue) -> Json:
-    """Converts a value to a JSON compatible value recursively."""""
+    """Converts a value to a JSON compatible value recursively."""
     if isinstance(value, interfaces.ResourceDict):
       result: Dict[str, Json] = {
         self._escape('res'): (value.type.type_id())}

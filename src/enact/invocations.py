@@ -19,7 +19,9 @@ import contextlib
 import dataclasses
 import inspect
 import traceback
-from typing import Any, Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, cast
+from typing import (
+  Any, Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type,
+  TypeVar, cast)
 
 from enact import contexts
 from enact import interfaces
@@ -50,9 +52,13 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 
   @classmethod
   def from_fields(cls: Type[C],
-                  field_values: Mapping[str, interfaces.FieldValue]) -> C:
+                  field_dict: Mapping[str, interfaces.FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
-    return cls(*field_values['args'])
+    return cls(*field_dict['args'])
+
+  def set_from(self: C, other: Any):
+    """Sets the fields of this resource from another resource."""
+    super().set_from(other)  # Raise error
 
 
 @resource_registry.register
@@ -60,7 +66,8 @@ class WrappedException(ExceptionResource):
   """A python exception wrapped as a resource."""
 
 
-I_contra = TypeVar('I_contra', contravariant=True, bound=interfaces.ResourceBase)
+I_contra = TypeVar(
+  'I_contra', contravariant=True, bound=interfaces.ResourceBase)
 O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
 
@@ -71,7 +78,7 @@ class InputRequest(ExceptionResource):
   def __init__(
       self,
       invokable: references.Ref['_InvokableBase'],
-      input: references.Ref,
+      input_resource: references.Ref,
       requested_output: Type[interfaces.ResourceBase],
       context: interfaces.FieldValue):
     if not references.Store.get_current():
@@ -79,20 +86,23 @@ class InputRequest(ExceptionResource):
         'InputRequest must be created within a Store context.')
     super().__init__(
       invokable,
-      input,
+      input_resource,
       requested_output,
       context)
 
   @property
   def invokable(self) -> references.Ref['_InvokableBase']:
+    """Returns the invokable that requested the input."""
     return self.args[0]
 
   @property
-  def input(self) -> references.Ref:
+  def for_resource(self) -> references.Ref:
+    """Returns a reference to the resource for which input is requested."""
     return self.args[1]
 
   @property
   def requested_type(self) -> Type[interfaces.ResourceBase]:
+    """Returns the type of input requested."""
     return self.args[2]
 
   @property
@@ -166,7 +176,8 @@ def _request_input(
     context: Anything that provides context for the request.
   Raises:
     InputRequest: The input request exception.
-    InputRequestOutsideInvocation: If the request was made outside an invocation.
+    InputRequestOutsideInvocation: If the request was made outside an
+      invocation.
   """
   builder: Optional[Builder] = Builder.get_current()
   if not builder:
@@ -255,6 +266,11 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
     children = self.response().children
     return children[index]()
 
+  def clear_output(self):
+    """Clear the output of the invocation."""
+    with self.response.modify() as response:
+      response.output = None
+
   def rewind(self, num_calls=1) -> 'Invocation[I_contra, O_co]':
     """Rewinds the invocation by the specified number of calls."""
     invocation = self.deep_copy_resource()
@@ -328,6 +344,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
         be ignored and the corresponding invokable will be retried on its
         actual input.
     """
+    super().__init__()
     self._exception_override = exception_override
     self._available_children = list(subinvocations)
     if not all(isinstance(x, references.Ref) for x in self._available_children):
@@ -345,9 +362,11 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     if (isinstance(arg, interfaces.NoneResource) and
         len(inspect.signature(invokable.call).parameters) == 0):
       # Allow invokables that take no call args if they accept NoneResources.
+      # pylint: disable=unnecessary-lambda-assignment
       call = lambda _: invokable.call()  # type: ignore
 
     if context:
+      # pylint: disable=protected-access
       replayed_output, child_ctx = context._consume_replay(invokable, arg)
       if replayed_output is not None:
         return replayed_output
@@ -366,9 +385,11 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     if (isinstance(arg, interfaces.NoneResource) and
         len(inspect.signature(invokable.call).parameters) == 0):
       # Allow invokables that take no call args if they accept NoneResources.
+      # pylint: disable=unnecessary-lambda-assignment
       call = lambda _: invokable.call()  # type: ignore
 
     if context:
+      # pylint: disable=protected-access
       replayed_output, child_ctx = context._consume_replay(invokable, arg)
       if replayed_output is not None:
         return replayed_output
@@ -381,18 +402,19 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
   def _consume_replay(
       self,
-      invokable: 'InvokableBase[I_contra, O_co]',
-      input: I_contra) -> Tuple[Optional[O_co], 'ReplayContext[I_contra, O_co]']:
+      invokable: '_InvokableBase[I_contra, O_co]',
+      input_resource: I_contra) -> Tuple[Optional[O_co],
+                                'ReplayContext[I_contra, O_co]']:
     """Replay the invocation if possible and return a child context."""
     request = references.commit(Request(
       references.commit(invokable),
-      references.commit(input)))
+      references.commit(input_resource)))
     for i, child in enumerate(self._available_children):
-      if (child().request == request):
+      if child().request == request:
         break
       elif self._strict:
         raise ReplayError(
-          f'Expected invocation {invokable}({input}) but got '
+          f'Expected invocation {invokable}({input_resource}) but got '
           f'{child().request().invokable()}({child().request().input()}).\n'
           f'Ensure that calls to subinvokable are deterministic '
           f'or use strict=False.')
@@ -454,6 +476,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       invokable: '_InvokableBase[I_contra, O_co]',
       input_resource: references.Ref[I_contra]):
     """Initializes the builder."""
+    super().__init__()
     self.invokable = invokable
     self.input_ref = input_resource
 
@@ -487,6 +510,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
     builder = cls.get_current()
     if not builder:
       return
+    # pylint: disable=protected-access
     builder._replayed_subinvocations = list(subinvocations)
 
   def _get_subinvocations(self) -> List[references.Ref[Invocation]]:
@@ -573,8 +597,10 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       output_ref: Optional[references.Ref[O_co]] = None
       try:
         input_resource = self.input_ref()
+        invokable = self.invokable
+        assert isinstance(invokable, InvokableBase)
         output_resource = ReplayContext.call_or_replay(
-          self.invokable, input_resource)
+          invokable, input_resource)
         self._check_call_valid(input_resource)
         output_ref = self._process_output(output_resource)
       except Exception as e:
@@ -591,8 +617,10 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       output_ref: Optional[references.Ref[O_co]] = None
       try:
         input_resource = self.input_ref()
+        invokable = self.invokable
+        assert isinstance(invokable, AsyncInvokableBase)
         output_resource = await ReplayContext.async_call_or_replay(
-          self.invokable, input_resource)
+          invokable, input_resource)
         self._check_call_valid(input_resource)
         output_ref = self._process_output(output_resource)
       except Exception as e:
@@ -609,8 +637,10 @@ def resolve_resource(
   """Resolves resource from arguments."""
   input_type = resource_type
   if (len(args) != 1 or kwargs or
-      not all(isinstance(arg, interfaces.ResourceBase) for arg in args) or
-      not all(isinstance(arg, interfaces.ResourceBase) for arg in kwargs.values())):
+      not all(isinstance(arg, interfaces.ResourceBase)
+              for arg in args) or
+      not all(isinstance(arg, interfaces.ResourceBase)
+              for arg in kwargs.values())):
     if input_type:
       # Attempts to create a resource of the input type.
       arg = input_type(*args, **kwargs)
@@ -659,7 +689,7 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   def _invoke_exit_stack(
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
-      strict: bool=False) -> contextlib.ExitStack():
+      strict: bool=False) -> contextlib.ExitStack:
     """Creates an exit stack for invoking an invokable."""
     exit_stack = contextlib.ExitStack()
     # Execute in a top-level context to ensure that there are no parents.
@@ -723,7 +753,7 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       except InvocationError:
         if raise_on_invocation_error:
           raise
-      except Exception:
+      except Exception:  # pylint: disable=broad-exception-caught
         if not builder.completed:
           raise
       invocation = builder.invocation
@@ -784,7 +814,7 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       except InvocationError:
         if raise_on_invocation_error:
           raise
-      except Exception:
+      except Exception:  # pylint: disable=broad-exception-caught
         if not builder.completed:
           raise
       invocation = builder.invocation
@@ -816,6 +846,7 @@ def typed_invokable(
     """Decorates a class as a typed invokable."""
     if not issubclass(cls, _InvokableBase):
       raise TypeError('Invokable must be a subclass of InvokableBase.')
+    # pylint: disable=protected-access
     cls._input_type = input_type
     cls._output_type = output_type
     if register:
@@ -844,8 +875,8 @@ def request_input(
   Args:
     requested_type: The type of input to request.
     for_resource: The resource to request input for. If unset, defaults to None.
-    context: An optional context to provide to the input request, e.g., instructions
-      to a user.
+    context: An optional context to provide to the input request, e.g.,
+      instructions to a user.
   Returns:
     The requested input. Note that this function will not return a value
     during normal execution, but will raise an InputRequest exception,
@@ -866,7 +897,7 @@ class InvocationGenerator(
   def __init__(
       self,
       invokable: Optional[InvokableBase[I_contra, O_co]]=None,
-      input: Optional[references.Ref[I_contra]]=None,
+      input_ref: Optional[references.Ref[I_contra]]=None,
       from_invocation: Optional[Invocation[I_contra, O_co]]=None):
     """Initializes an interactive invocation."""
     if invokable and not isinstance(invokable, InvokableBase):
@@ -877,13 +908,13 @@ class InvocationGenerator(
     if from_invocation is not None and invokable is not None:
       raise ValueError(
         'Cannot specify both an invokable and an invocation.')
-    if from_invocation is not None and input is not None:
+    if from_invocation is not None and input_ref is not None:
       raise ValueError(
         'Cannot specify both an input and an invocation.')
     self._invocation: Optional[Invocation[I_contra, O_co]] = None
     self._from_invocation = from_invocation
     self._invokable = invokable
-    self._input = input
+    self._input = input_ref
     self._request_input: Optional[interfaces.ResourceBase] = None
 
   @property
@@ -947,7 +978,7 @@ class InvocationGenerator(
       else:
         assert self._invokable
         if not self._input:
-          if interfaces.NoneResource != self._invokable._input_type:
+          if interfaces.NoneResource != self._invokable.get_input_type():
             raise InvocationError(
               'Invokable does not have input type NoneResource. '
               'Please provide an explicit input reference on generator '
@@ -976,8 +1007,9 @@ class InvocationGenerator(
   def send(self, value) -> InputRequest:
     if not self._invocation:
       if value is not None:
-        raise TypeError('Can\'t send non-None value to a just-started generator.')
-      return self.__next__()
+        raise TypeError(
+          'Can\'t send non-None value to a just-started generator.')
+      return next(self)
     if self.complete:
       raise StopIteration()
     if not isinstance(value, self.input_request.requested_type):
@@ -990,5 +1022,6 @@ class InvocationGenerator(
       raise StopIteration()
     return self.input_request
 
+  # pylint: disable=useless-parent-delegation
   def throw(self, *args, **kwargs):
     super().throw(*args, **kwargs)

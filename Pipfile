@@ -9,9 +9,8 @@ jupyter = "*"
 ipywidgets = "*"
 replicate = "*"
 openai = "*"
-
-[dev-packages]
 mypy = "*"
+pylint = "*"
 numpy = "*"
 ipykernel = "*"
 types-Pillow = "*"

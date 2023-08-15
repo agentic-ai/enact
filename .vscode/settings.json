@@ -21,4 +21,7 @@
     "files.exclude": {
         "build/**": true
     },
+    "pylint.args": [
+        "--rcfile=.vscode/pylintrc"
+    ],
 }

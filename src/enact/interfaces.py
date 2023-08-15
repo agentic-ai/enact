@@ -97,51 +97,51 @@ class ResourceBase:
     raise NotImplementedError()
 
   @staticmethod
-  def _to_dict_value(v: FieldValue) -> ResourceDictValue:
+  def _to_dict_value(value: FieldValue) -> ResourceDictValue:
     """Transforms a field value to a resource dict value."""
-    if isinstance(v, ResourceBase):
-      return v.to_resource_dict()
-    if isinstance(v, PRIMITIVES):
-      return v
-    if isinstance(v, type) and issubclass(v, ResourceBase):
-      return v
-    if isinstance(v, Sequence):
-      return [ResourceBase._to_dict_value(x) for x in v]
-    if isinstance(v, Mapping):
-      def _assert_str(s: str) -> str:
-        if not isinstance(s, str):
+    if isinstance(value, ResourceBase):
+      return value.to_resource_dict()
+    if isinstance(value, PRIMITIVES):
+      return value
+    if isinstance(value, type) and issubclass(value, ResourceBase):
+      return value
+    if isinstance(value, Sequence):
+      return [ResourceBase._to_dict_value(x) for x in value]
+    if isinstance(value, Mapping):
+      def _assert_str(maybe_str: str) -> str:
+        if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
           raise FieldTypeError(
-            f'Expected string key, got {type(s)}')
-        return s
+            f'Expected string key, got {type(maybe_str)}')
+        return maybe_str
       return {
         _assert_str(k): ResourceBase._to_dict_value(v)
-        for k, v in v.items()}
+        for k, v in value.items()}
     raise FieldTypeError(
-      f'Encountered unsupported field type {type(v)}: {v}')
+      f'Encountered unsupported field type {type(value)}: {value}')
 
   @staticmethod
-  def _from_dict_value(v: ResourceDictValue) -> FieldValue:
+  def _from_dict_value(value: ResourceDictValue) -> FieldValue:
     """Transforms a resource dict value to a field value."""
-    if isinstance(v, PRIMITIVES):
-      return v
-    if isinstance(v, type) and issubclass(v, ResourceBase):
-      return v
-    if isinstance(v, Sequence):
-      return [ResourceBase._from_dict_value(x) for x in v]
-    if isinstance(v, ResourceDict):
-      return v.type.from_resource_dict(v)
-    if isinstance(v, Mapping):
-      def _assert_str(s: str) -> str:
-        if not isinstance(s, str):
+    if isinstance(value, PRIMITIVES):
+      return value
+    if isinstance(value, type) and issubclass(value, ResourceBase):
+      return value
+    if isinstance(value, Sequence):
+      return [ResourceBase._from_dict_value(x) for x in value]
+    if isinstance(value, ResourceDict):
+      return value.type.from_resource_dict(value)
+    if isinstance(value, Mapping):
+      def _assert_str(maybe_str: str) -> str:
+        if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
           raise FieldTypeError(
-            f'Expected string key, got {type(s)}')
-        return s
+            f'Expected string key, got {type(maybe_str)}')
+        return maybe_str
       return {
         _assert_str(k): ResourceBase._from_dict_value(v)
-        for k, v in v.items()}
+        for k, v in value.items()}
     raise FieldTypeError(
       f'Encountered unsupported resource '
-      f'dict value type {type(v)}: {v}')
+      f'dict value type {type(value)}: {value}')
 
   def deep_copy_resource(self: C) -> C:
     """Create a deep-copy of the resource."""
@@ -150,19 +150,19 @@ class ResourceBase:
   def to_resource_dict(self) -> 'ResourceDict':
     """Returns a ResourceDict dictionary representation."""
     result = ResourceDict(type(self))
-    for k, v in self.field_items():
-      result[k] = ResourceBase._to_dict_value(v)
+    for field_name, value in self.field_items():
+      result[field_name] = ResourceBase._to_dict_value(value)
     return result
 
   @classmethod
-  def from_resource_dict(cls: Type[C], d: 'ResourceDict') -> C:
+  def from_resource_dict(cls: Type[C], resorce_dict: 'ResourceDict') -> C:
     """Constructs the resource from a ResourceDict dictionary."""
-    if not issubclass(d.type, cls):
+    if not issubclass(resorce_dict.type, cls):
       raise ResourceError(
-        f'Expected resource of type {cls}, got {d.type}')
+        f'Expected resource of type {cls}, got {resorce_dict.type}')
     field_dict = {
       k: ResourceBase._from_dict_value(v)
-      for k, v in d.items()}
+      for k, v in resorce_dict.items()}
     return cls.from_fields(field_dict)
 
   def set_from(self: C, other: C):
@@ -174,6 +174,7 @@ class ResourceBase:
     Args:
       other: The resource to set fields from.
     """
+
     raise NotImplementedError(
       f'Setting fields from another resource is not '
       f'supported by type {type(self)}.')
