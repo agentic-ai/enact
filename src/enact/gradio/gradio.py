@@ -194,7 +194,7 @@ class StrWidget(ResourceWidget):
 
   def __init__(self, **kwargs):
     super().__init__()
-    self._box = self.add(gr.Textbox(**kwargs, show_label=False))
+    self._box = self.add(gr.TextArea(**kwargs, show_label=False))
 
   @classmethod
   def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
