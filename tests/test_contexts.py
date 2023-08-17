@@ -16,7 +16,7 @@
 
 import unittest
 import threading
-from typing import Any, Optional
+from typing import Any, Optional, Type
 
 from enact import contexts
 
@@ -24,6 +24,11 @@ from enact import contexts
 @contexts.register
 class SimpleContext(contexts.Context):
   """A context object for testing."""
+  permissive_init: bool = True
+
+  @classmethod
+  def permissive_initialization(cls) -> bool:
+    return cls.permissive_init
 
   def __init__(self):
     super().__init__()
@@ -88,12 +93,21 @@ class ContextDecoratorTest(unittest.TestCase):
     except contexts.ContextError as e:
       self.thread_result = e
 
-  def test_threading_fails(self):
+  def test_threading_fails_if_not_permissive(self):
     """Tests that threading without a decorator fails."""
+    SimpleContext.permissive_init = False
     t = threading.Thread(target=self.enter_context)
     t.start()
     t.join()
     self.assertIsInstance(self.thread_result, contexts.ContextError)
+
+  def test_threading_succeeds_if_permissive(self):
+    """Tests that threading without a decorator fails."""
+    SimpleContext.permissive_init = True
+    t = threading.Thread(target=self.enter_context)
+    t.start()
+    t.join()
+    self.assertEqual(self.thread_result, 1)
 
   def test_with_new_contexts(self):
     """Tests that running with new contexts works."""

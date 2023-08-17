@@ -51,6 +51,30 @@ class Context:
         f'with the "@register" decorator.') from key_error
 
   @classmethod
+  def permissive_initialization(cls: Type[C]) -> bool:
+    """Returns whether the class has permissive initialization.
+
+    Contexts use contextvars for tracking whether an execution is in-context or
+    out-of-context. Contextvars have special handling in threads and async
+    executions, e.g., they are thread-local and hence starting a new thread will
+    erase the context stack. The Context class can detect when this happens,
+    since it will store information in the main thread during registration. This
+    variable controls how it handles such situations:
+
+    If permissive_initialization is set to True, the context will automatically
+    initialize to an empty stack when it detects that it is being run in an
+    uninitialized context. If set to False, then the class will trigger an error
+    and ask the developer to specify whether they want to copy context or start
+    a fresh calling context. This may be done using the 'with_current_contexts'
+    or with_new_contexts function decorators.
+
+    Overriding this function to return False is useful in situation where
+    accidentally operating in a fresh context is a problem, e.g., when
+    implementing contexts that deal with encryption.
+    """
+    return True
+
+  @classmethod
   @contextlib.contextmanager
   def top_level(cls: Type[C]):
     """Returns a context manager to execute code in a top-level context."""
@@ -68,6 +92,9 @@ class Context:
     try:
       current_context = context_var.get()
     except LookupError as lookup_error:
+      if cls.permissive_initialization():
+        context_var.set(None)
+        return None
       raise ContextError(
         f'Context {cls} not initialized. If running inside a thread, make sure '
         f'to annotate the thread function with either the '
