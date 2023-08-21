@@ -14,17 +14,18 @@
 
 """FastAPI bindings for enact invokables."""
 
-import fastapi
-from typing import List
+import dataclasses
+import inspect
+from typing import List, Optional, Type
 
 import enact
-from enact import invocations
-from enact import references
-from enact import resources
+
+
+import fastapi
 
 def get(
-  app: fastapi.FastAPI, route: str, invokable: invocations.Invokable,
-  store: references.Store):
+  app, route: str, invokable: enact.Invokable,
+  store: enact.Store):
   """Exposes an envokable as a new get API endpoint.
 
   Args:
@@ -36,8 +37,8 @@ def get(
   _add_fast_api(app, route, invokable, store, ['GET'])
 
 def post(
-  app: fastapi.FastAPI, route: str, invokable: invocations.Invokable,
-  store: references.Store):
+  app, route: str, invokable: enact.Invokable,
+  store: enact.Store):
   """Exposes an envokable as a new post API endpoint.
 
   Args:
@@ -48,17 +49,66 @@ def post(
   """
   _add_fast_api(app, route, invokable, store, ['POST'])
 
-def _add_fast_api(
-  app: fastapi.FastAPI, route: str, invokable: invocations.Invokable,
-  store: references.Store, methods: List[str]):
-  """Internal implementation of wrapping an Invokable via FastAPI"""
-  def journaled_call() -> resources.Resource:
-    with store:
-      return invokable.invoke().get_output()
+def _check_resource_type(t: Optional[Type[enact.ResourceBase]], in_out: str):
+  """Check that input or output type is set and not overly general."""
+  if t is None:
+    raise ValueError(f'{in_out} type must be set on invokable, use the'
+                     f'@enact.typed_invokable decorator')
+  if t in (enact.Resource, enact.ResourceBase):
+    raise ValueError(
+      f'{in_out} type is overly general: {t}. FastAPI requires specific '
+      f'types to be set for the request.')
+  if issubclass(t, enact.NoneResource):
+    return
+  if not issubclass(t, enact.Resource):
+    raise ValueError(
+      f'{in_out} is not a subclass of enact.Resource: {t}. Only '
+      f'dataclass based resource are supported by FastAPI.')
+  dataclass_fields = set(f.name for f in dataclasses.fields(t))
+  resource_fields = set(t.field_names())
+  # Make sure that dataclass fields coincide with resource fields.
+  if dataclass_fields != resource_fields:
+    raise ValueError(
+      f'{in_out} type {t} has dataclass fields {dataclass_fields} that do not '
+      f'coincide with resource fields {resource_fields}. Using FastAPI '
+      f'that all resource fields are declared as dataclass fields.')
 
-  def journaled_call_input(data: resources.Resource) -> resources.Resource:
+def _check_invokable(invokable: enact.Invokable, methods: List[str]):
+  """Check input and output type."""
+  _check_resource_type(invokable.get_input_type(), 'Input')
+  _check_resource_type(invokable.get_output_type(), 'Output')
+  if 'GET' in methods and invokable.get_input_type() != enact.NoneResource:
+    raise ValueError(
+      'GET is only supported for invokables with input type NoneResource.')
+
+def _add_fast_api(
+  app, route: str, invokable: enact.Invokable,
+  store: enact.Store, methods: List[str]):
+  """Internal implementation of wrapping an Invokable via FastAPI"""
+  def get_output(invocation: enact.Invocation):
+    if not invocation.successful():
+      raise fastapi.HTTPException(
+        status_code=500, detail=str(invocation.get_raised()))
+    return invocation.get_output()
+
+  def journaled_call() -> enact.Resource:
     with store:
-      return invokable.invoke(enact.commit(data)).get_output()
+      return get_output(invokable.invoke())
+
+  def journaled_call_input(data: enact.Resource) -> enact.Resource:
+    if data is None:
+      raise fastapi.HTTPException(status_code=400, detail='No data provided')
+    with store:
+      return get_output(invokable.invoke(enact.commit(data)))
+
+  _check_invokable(invokable, methods)
+
+  param = inspect.Parameter(
+    'data', inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None,
+    annotation=invokable.get_input_type())
+
+  journaled_call_input.__signature__ = inspect.Signature(  # type: ignore
+    parameters=[param], return_annotation=invokable.get_output_type())
 
   wrapper_fn = (journaled_call if
                 invokable.get_input_type() == enact.NoneResource
