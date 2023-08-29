@@ -14,7 +14,6 @@
 
 """Functionality for invokable resources."""
 
-import collections
 import contextlib
 import dataclasses
 import inspect
@@ -889,9 +888,7 @@ def request_input(
   return RequestInput(requested_type, context)(for_resource)
 
 
-class InvocationGenerator(
-    collections.Generator,
-    Generic[I_contra, O_co]):
+class InvocationGenerator(Generic[I_contra, O_co]):
   """A generator that yields InputRequests from an invocation."""
 
   def __init__(
@@ -967,6 +964,10 @@ class InvocationGenerator(
     """
     self._request_input = resource.deep_copy_resource()
 
+  def __iter__(self) -> 'InvocationGenerator[I_contra, O_co]':
+    """Returns the generator."""
+    return self
+
   def __next__(self) -> InputRequest:
     """Continues the invocation until the next input request or completion."""
     if self.complete:
@@ -1021,7 +1022,3 @@ class InvocationGenerator(
     if self.complete:
       raise StopIteration()
     return self.input_request
-
-  # pylint: disable=useless-parent-delegation
-  def throw(self, *args, **kwargs):
-    super().throw(*args, **kwargs)
