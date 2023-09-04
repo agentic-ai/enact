@@ -14,9 +14,10 @@
 
 """Core resource interface."""
 
+import abc
 import functools
 import json
-from typing import Dict, Generic, Iterable, Mapping, Sequence, Tuple, Type, TypeVar, Union
+from typing import Dict, Generic, Iterable, List, Mapping, Sequence, Tuple, Type, TypeVar, Union
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -35,15 +36,15 @@ FieldValue = Union[
   Primitives,
   'ResourceBase',
   Type['ResourceBase'],
-  Sequence['FieldValue'],
-  Mapping[str, 'FieldValue']]
+  List['FieldValue'],
+  Dict[str, 'FieldValue']]
 
 
 ResourceDictValue = Union[
   Primitives,
   Type['ResourceBase'],
-  Sequence['ResourceDictValue'],
-  Mapping[str, 'ResourceDictValue']]
+  List['ResourceDictValue'],
+  Dict[str, 'ResourceDictValue']]
 
 
 C = TypeVar('C', bound='ResourceBase')
@@ -78,10 +79,12 @@ class ResourceBase:
     return json.dumps(cls.type_descr(), sort_keys=True)
 
   @classmethod
+  @abc.abstractmethod
   def field_names(cls) -> Iterable[str]:
     """Returns the names of the fields of the resource."""
     raise NotImplementedError(f'{cls} does not implement field_names')
 
+  @abc.abstractmethod
   def field_values(self) -> Iterable[FieldValue]:
     """Return a list of field values, aligned with field_names."""
     raise NotImplementedError(f'{type(self)} does not implement field_values')
@@ -91,6 +94,7 @@ class ResourceBase:
     return zip(self.field_names(), self.field_values())
 
   @classmethod
+  @abc.abstractmethod
   def from_fields(cls: Type[C],
                   field_dict: Mapping[str, FieldValue]) -> C:
     """Constructs the resource from a field dictionary."""
@@ -192,6 +196,7 @@ class ResourceDict(Generic[C], dict, Mapping[str, ResourceDictValue]):
     return self.type.from_resource_dict(self)
 
 
+# TODO: Remove this
 class NoneResource(ResourceBase):
   """The None resource."""
 
@@ -217,3 +222,28 @@ class NoneResource(ResourceBase):
     raise NotImplementedError(
       f'Setting fields from another resource is not '
       f'supported by type {type(self)}.')
+
+
+
+WrappedT = TypeVar('WrappedT')
+WrapperT = TypeVar('WrapperT', bound='ResourceWrapperBase')
+
+
+class ResourceWrapperBase(ResourceBase, Generic[WrappedT]):
+  """Interface for resources that wrap python objects."""
+  @classmethod
+  @abc.abstractmethod
+  def wrapped_type(cls) -> Type[WrappedT]:
+    """Returns the type of the wrapped value."""
+    raise NotImplementedError()
+
+  @classmethod
+  @abc.abstractmethod
+  def wrap(cls: Type[WrapperT], value: WrappedT) -> WrapperT:
+    """Wrap a value."""
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def unwrap(self) -> WrappedT:
+    """Wrap a value."""
+    raise NotImplementedError()
