@@ -14,9 +14,14 @@
 
 """Type registration functionality to allow deserialization of resources."""
 
-from typing import Dict, Optional, Type, TypeVar
+from typing import (
+  Any, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar)
 
 from enact import interfaces
+
+
+WrappedT = TypeVar('WrappedT')
+WrapperT = TypeVar('WrapperT', bound=interfaces.ResourceWrapperBase)
 
 
 class RegistryError(Exception):
@@ -25,6 +30,110 @@ class RegistryError(Exception):
 
 class ResourceNotFound(RegistryError):
   """Raised when a resource is not found."""
+
+
+
+FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
+
+
+class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
+  """Base class for field value wrappers."""
+  wrapped: interfaces.FieldValue
+
+  def __init__(self, wrapped: interfaces.FieldValue):
+    """Initializes a wrapped field value."""
+    self.wrapped = wrapped
+
+  @classmethod
+  def field_names(cls) -> Iterable[str]:
+    """Returns the names of the fields of the resource."""
+    return ('wrapped',)
+
+  def field_values(self) -> Iterable[interfaces.FieldValue]:
+    return (self.wrapped,)
+
+  @classmethod
+  def from_fields(
+      cls: Type[FieldValueWrapperT],
+      field_dict: Mapping[str, interfaces.FieldValue]) -> FieldValueWrapperT:
+    assert len(field_dict) == 1
+    return cls(field_dict['wrapped'])
+
+  def set_from(self: FieldValueWrapperT, other: FieldValueWrapperT):
+    """Sets the fields of this resource from another resource."""
+    if not type(self) is type(other):
+      raise RegistryError(
+        f'Cannot set fields from {type(other)} to {type(self)}.')
+    self.wrapped = other.deep_copy_resource().wrapped
+
+  @classmethod
+  def wrap(cls: Type[FieldValueWrapperT],
+           value: WrappedT) -> FieldValueWrapperT:
+    """Wrap a value directly."""
+    assert isinstance(value, cls.wrapped_type()), (
+      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return cls(value)
+
+  def unwrap(self) -> WrappedT:
+    """Unwrap a value directly."""
+    assert isinstance(self.wrapped, self.wrapped_type())
+    return self.wrapped
+
+
+class NoneWrapper(FieldValueWrapper[None]):
+  """Wrapper for None."""
+  @classmethod
+  def wrapped_type(cls) -> Type[None]:
+    return type(None)
+
+
+class IntWrapper(FieldValueWrapper[int]):
+  """Wrapper for ints."""
+  @classmethod
+  def wrapped_type(cls) -> Type[int]:
+    return int
+
+
+class FloatWrapper(FieldValueWrapper[float]):
+  """Wrapper for floats."""
+  @classmethod
+  def wrapped_type(cls) -> Type[float]:
+    return float
+
+
+class BoolWrapper(FieldValueWrapper[bool]):
+  """Wrapper for bools."""
+  @classmethod
+  def wrapped_type(cls) -> Type[bool]:
+    return bool
+
+
+class StrWrapper(FieldValueWrapper[str]):
+  """Wrapper for bytes."""
+  @classmethod
+  def wrapped_type(cls) -> Type[str]:
+    return str
+
+
+class BytesWrapper(FieldValueWrapper[bytes]):
+  """Wrapper for bytes."""
+  @classmethod
+  def wrapped_type(cls) -> Type[bytes]:
+    return bytes
+
+
+class ListWrapper(FieldValueWrapper[list]):
+  """Wrapper for lists."""
+  @classmethod
+  def wrapped_type(cls) -> Type[list]:
+    return list
+
+
+class DictWrapper(FieldValueWrapper[dict]):
+  """Wrapper for dicts."""
+  @classmethod
+  def wrapped_type(cls) -> Type[dict]:
+    return dict
 
 
 class Registry:
@@ -36,10 +145,20 @@ class Registry:
     """Initializes a registry."""
     self.allow_reregistration = True
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
+    self._wrapped_types: Dict[Type, Type[interfaces.ResourceWrapperBase]] = {}
+    self._wrapper_types: Set[Type[interfaces.ResourceWrapperBase]] = set()
     self.register(interfaces.NoneResource)
+    self.register_wrapper(NoneWrapper)
+    self.register_wrapper(IntWrapper)
+    self.register_wrapper(FloatWrapper)
+    self.register_wrapper(BoolWrapper)
+    self.register_wrapper(StrWrapper)
+    self.register_wrapper(BytesWrapper)
+    self.register_wrapper(ListWrapper)
+    self.register_wrapper(DictWrapper)
 
   def register(self, resource: Type[interfaces.ResourceBase]):
-    """Registers the resource or reference type."""
+    """Registers the resource type."""
     if not issubclass(resource, interfaces.ResourceBase):
       raise RegistryError(
         f'Cannot register non-resource type: {resource}')
@@ -62,6 +181,30 @@ class Registry:
       raise ResourceNotFound(f'No type registered for {type_id}')
     return resource_class
 
+  def register_wrapper(self, wrapper_type: Type[WrapperT]):
+    """Register a new wrapper type."""
+    self.register(wrapper_type)
+    self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
+    self._wrapper_types.add(wrapper_type)
+
+  def wrap(self, value: Any) -> interfaces.ResourceBase:
+    """Wrap a value if necessary."""
+    wrapper = self._wrapped_types.get(type(value))
+    if wrapper:
+      return wrapper.wrap(value)
+    if isinstance(value, interfaces.ResourceBase):
+      return value
+    raise RegistryError(
+      f'Cannot wrap value of type {type(value)}. Please register '
+      f'a ResourceWrapper for this type.')
+
+  def unwrap(self, value: interfaces.ResourceBase) -> Any:
+    """Unwrap a value if wrapped."""
+    if isinstance(value, interfaces.ResourceWrapperBase):
+      return value.unwrap()
+    return value
+
+
   @classmethod
   def get(cls) -> 'Registry':
     """Returns the singleton registry."""
@@ -70,10 +213,23 @@ class Registry:
     return cls._singleton
 
 
-R = TypeVar('R', bound=interfaces.ResourceBase)
+ResourceT = TypeVar('ResourceT', bound=interfaces.ResourceBase)
 
 
-def register(cls: Type[R]) -> Type[R]:
+def register(cls: Type[ResourceT]) -> Type[ResourceT]:
   """Decorator for resource classes."""
   Registry.get().register(cls)
   return cls
+
+def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
+  """Decorator for resource wrapper classes."""
+  Registry.get().register_wrapper(cls)
+  return cls
+
+def wrap(value: Any) -> interfaces.ResourceBase:
+  """Wrap a value."""
+  return Registry.get().wrap(value)
+
+def unwrap(value: interfaces.ResourceBase) -> Any:
+  """Wrap a value."""
+  return Registry.get().unwrap(value)

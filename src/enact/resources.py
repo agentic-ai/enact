@@ -14,6 +14,7 @@
 
 """Dataclass-based resources."""
 
+import abc
 import dataclasses
 from typing import Iterable, Mapping, Type, TypeVar
 
@@ -68,3 +69,29 @@ class Resource(interfaces.ResourceBase):
     copy = other.deep_copy_resource()
     for field in dataclasses.fields(self):
       setattr(self, field.name, getattr(copy, field.name))
+
+
+WrappedT = TypeVar('WrappedT')
+WrapperT = TypeVar('WrapperT', bound='ResourceWrapper')
+
+
+@dataclasses.dataclass
+class ResourceWrapper(interfaces.ResourceWrapperBase[WrappedT], Resource):
+  """Base class for dataclass-based resource wrappers."""
+
+  @classmethod
+  @abc.abstractmethod
+  def wrapped_type(cls) -> Type[WrappedT]:
+    """Returns the type of the wrapped value."""
+    raise NotImplementedError()
+
+  @classmethod
+  @abc.abstractmethod
+  def wrap(cls: Type[WrapperT], value: WrappedT) -> WrapperT:
+    """Wrap a value."""
+    raise NotImplementedError()
+
+  @abc.abstractmethod
+  def unwrap(self) -> WrappedT:
+    """Wrap a value."""
+    raise NotImplementedError()
