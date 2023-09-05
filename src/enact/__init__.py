@@ -50,7 +50,7 @@ from enact.pretty_print import PPrinter
 from enact.pretty_print import PPValue
 
 from enact.references import commit
-from enact.references import get
+from enact.references import checkout
 from enact.references import FileBackend
 from enact.references import InMemoryBackend
 from enact.references import Ref

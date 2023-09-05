@@ -48,7 +48,7 @@ P = TypeVar('P', bound='Ref')
 R = TypeVar('R', bound=interfaces.ResourceBase)
 
 
-def get(ref: Optional['Ref[R]']) -> R:
+def checkout(ref: Optional['Ref[R]']) -> R:
   """Gets the reference or asserts false if None."""
   assert ref
   return ref.checkout()
