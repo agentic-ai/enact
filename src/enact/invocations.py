@@ -47,7 +47,7 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 
   def field_values(self) -> Iterable[interfaces.FieldValue]:
     """Return a list of field values, aligned with field_names."""
-    yield self.args
+    yield list(self.args)
 
   @classmethod
   def from_fields(cls: Type[C],
