@@ -18,6 +18,7 @@ import functools
 import io
 import os
 from typing import List, NamedTuple, Tuple
+from litellm import completion
 
 import PIL.Image
 import replicate  # type: ignore
@@ -84,20 +85,14 @@ def chat_gpt(messages: List[Tuple[str, str]],
   Returns:
     The response from ChatGPT.
   """
-  json_dict = {
-    'model': model,
-    'messages': [
-      {'role': role, 'content': content}
-      for role, content in messages]}
-  r = requests.post(
-    url=CHAT_GPT_URL,
-    json=json_dict,
-    headers={'Authorization': 'Bearer ' + OPENAI_API_KEY.get(),
-             'Content-Type': 'application/json'})
   try:
-    return r.json()[
-      'choices'][0]['message']['content']
-  except IndexError:
-    raise ValueError('Unexpected response: %s' % r.json())
-  except KeyError:
-    raise ValueError('Unexpected response: %s' % r.json())
+    response = completion(
+      model=model,
+      messages=[
+        {'role': role, 'content': content}
+        for role, content in messages],
+        api_key=OPENAI_API_KEY.get()
+    )
+    return response['choices'][0]['message']['content']
+  except Exception as e:
+    raise Exception("Unexpected response: %s" % str(e))  

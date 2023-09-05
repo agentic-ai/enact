@@ -5,6 +5,7 @@ dependencies = [
   "gradio",
   "numpy",
   "Pillow",
+  "litellm",
 ]
 description = "A framework for generative software."
 readme = "README.md"
