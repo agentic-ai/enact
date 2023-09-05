@@ -17,11 +17,11 @@
 import abc
 import functools
 import json
-from typing import Dict, Generic, Iterable, List, Mapping, Sequence, Tuple, Type, TypeVar, Union
+from typing import Dict, Generic, Iterable, List, List, Tuple, Type, TypeVar, Union
 
 
 JsonLeaf = Union[int, float, str, bool, None]
-Json = Union[JsonLeaf, Sequence['Json'], Dict[str, 'Json']]
+Json = Union[JsonLeaf, List['Json'], Dict[str, 'Json']]
 
 
 PRIMITIVES = (int, float, str, bytes, bool, type(None))
@@ -68,7 +68,7 @@ class ResourceBase:
   """
 
   @classmethod
-  def type_descr(cls) -> Mapping[str, Json]:
+  def type_descr(cls) -> Dict[str, Json]:
     """Returns a unique descriptor for the type."""
     return {'name': f'{cls.__module__}.{cls.__qualname__}'}
 
@@ -96,7 +96,7 @@ class ResourceBase:
   @classmethod
   @abc.abstractmethod
   def from_fields(cls: Type[C],
-                  field_dict: Mapping[str, FieldValue]) -> C:
+                  field_dict: Dict[str, FieldValue]) -> C:
     """Constructs the resource from a field dictionary."""
     raise NotImplementedError()
 
@@ -109,9 +109,9 @@ class ResourceBase:
       return value
     if isinstance(value, type) and issubclass(value, ResourceBase):
       return value
-    if isinstance(value, Sequence):
+    if isinstance(value, List):
       return [ResourceBase._to_dict_value(x) for x in value]
-    if isinstance(value, Mapping):
+    if isinstance(value, Dict):
       def _assert_str(maybe_str: str) -> str:
         if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
           raise FieldTypeError(
@@ -130,11 +130,11 @@ class ResourceBase:
       return value
     if isinstance(value, type) and issubclass(value, ResourceBase):
       return value
-    if isinstance(value, Sequence):
+    if isinstance(value, List):
       return [ResourceBase._from_dict_value(x) for x in value]
     if isinstance(value, ResourceDict):
       return value.type.from_resource_dict(value)
-    if isinstance(value, Mapping):
+    if isinstance(value, Dict):
       def _assert_str(maybe_str: str) -> str:
         if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
           raise FieldTypeError(
@@ -184,7 +184,7 @@ class ResourceBase:
       f'supported by type {type(self)}.')
 
 
-class ResourceDict(Generic[C], dict, Mapping[str, ResourceDictValue]):
+class ResourceDict(Generic[C], Dict[str, ResourceDictValue]):
   """A dictionary representing a resource with attached type info."""
 
   def __init__(self, resource_type: Type[C], *args, **kwargs):
@@ -212,7 +212,7 @@ class NoneResource(ResourceBase):
   @classmethod
   def from_fields(
       cls: Type[C],
-      field_dict: Mapping[str, FieldValue]) -> C:
+      field_dict: Dict[str, FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
     assert not field_dict
     return cls()
