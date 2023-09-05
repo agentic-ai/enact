@@ -45,7 +45,7 @@ class PackedResource(NamedTuple):
 
 
 P = TypeVar('P', bound='Ref')
-R = TypeVar('R', bound=interfaces.ResourceBase)
+R = TypeVar('R')
 
 
 def checkout(ref: Optional['Ref[R]']) -> R:
@@ -55,13 +55,13 @@ def checkout(ref: Optional['Ref[R]']) -> R:
 
 
 def commit(resource: R) -> 'Ref[R]':
-  """Commits a resource to the store and returns a reference."""
+  """Commits a value to the store and returns a reference."""
   return Store.current().commit(resource)
 
 
 @resource_registry.register
 class Ref(Generic[R], interfaces.ResourceBase):
-  """Represents a reference to other resources.
+  """Represents a reference to a resource or wrappable python object.
 
   References are JSON encodable objects and their key-sorted json encoding
   serves as a string key for the underlying resource.
@@ -71,10 +71,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
   end-to-end encryption or compression.
   """
 
-  def __init__(self, digest: str, resource: Optional[R]=None):
+  def __init__(self, digest: str, value: Optional[R]=None):
     """Initializes the reference from a digest and optionally the resource."""
     self._digest = digest
-    self._cached: Optional[R] = resource
+    self._cached: Optional[R] = value
 
   @property
   def digest(self) -> str:
@@ -106,7 +106,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   def checkout(self) -> R:
     """Fetches the resource from the cache or active store."""
-    if self._cached is None or self.from_resource(self._cached) != self:
+    if (self._cached is None or
+        self.from_resource(resource_registry.wrap(self._cached)) != self):
       self._cached = Store.current().checkout(self)
     return self._cached
 
@@ -117,19 +118,19 @@ class Ref(Generic[R], interfaces.ResourceBase):
   def set(self, resource: R):
     """Sets the reference to point to the given resource."""
     self._cached = resource
-    self._digest = digests.digest(resource)
+    self._digest = digests.digest(resource_registry.wrap(resource))
 
   @classmethod
   def from_resource(cls: Type[P], resource: interfaces.ResourceBase) -> P:
     """Constructs a reference from a resource."""
-    return cls(digest=digests.digest(resource), resource=resource)
+    return cls(
+      digest=digests.digest(resource),
+      value=resource_registry.unwrap(resource))
 
   def __eq__(self, other: Any):
-    """Returns true if the referenced object is the same."""
-    if not isinstance(other, Ref):
+    """Returns true if the other object is the same reference."""
+    if not isinstance(other, Ref):  # pylint: disable=unidiomatic-typecheck
       return False
-    if type(self) != type(other):  # pylint: disable=unidiomatic-typecheck
-      other = self.from_resource(other.checkout())
     return self.digest == other.digest
 
   @classmethod
@@ -156,14 +157,15 @@ class Ref(Generic[R], interfaces.ResourceBase):
         f'Reference type mismatch: {packed_resource.ref} is not a {cls}.')
     cls.verify(packed_resource)
     return cast(
-      R, packed_resource.data.to_resource())
+      R, resource_registry.unwrap(packed_resource.data.to_resource()))
 
   @classmethod
   def pack(cls, resource: R) -> PackedResource:
-    """Packs the resource."""
+    """Wraps and packs the resource."""
+    as_resource = resource_registry.wrap(resource)
     return PackedResource(
-      resource.to_resource_dict(),
-      ref=cls.from_resource(resource))
+      as_resource.to_resource_dict(),
+      ref=cls.from_resource(as_resource))
 
   @classmethod
   def field_names(cls) -> Iterable[str]:
