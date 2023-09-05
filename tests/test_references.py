@@ -23,6 +23,7 @@ from enact import interfaces
 from enact import references
 from enact import serialization
 from enact import contexts
+from enact import resource_registry
 
 # pylint: disable=invalid-name,missing-class-docstring
 
@@ -93,6 +94,16 @@ class RefTest(unittest.TestCase):
     ref2 = ref.from_id(ref.id)
     self.assertEqual(ref, ref2)
 
+  def test_ref_to_wrapped_type(self):
+    """Tests references to wrapped python types."""
+    value = 1
+    packed = enact.Ref.pack(value)
+    self.assertIsInstance(
+      packed.data.to_resource(),
+      resource_registry.IntWrapper)
+    packed.ref.verify(packed)
+    self.assertEqual(packed.ref.unpack(packed), 1)
+
 
 class StoreTest(unittest.TestCase):
   """A test for stores."""
@@ -115,6 +126,14 @@ class StoreTest(unittest.TestCase):
     self.assertTrue(store.has(ref))
     self.assertEqual(store.checkout(ref), resource)
     self.assertNotEqual(id(store.checkout(ref)), id(resource))
+
+  def test_wrapped_ref(self):
+    store = enact.Store()
+    for val in [None, 0, 0.0, 'str', True, bytes([1, 2, 3]),
+                [1, 2, 3], {'a': 1}]:
+      with self.subTest(val):
+        ref = store.commit(val)
+        self.assertEqual(store.checkout(ref), val)
 
   def test_caching(self):
     """Test that caching works correctly."""
@@ -145,6 +164,17 @@ class StoreTest(unittest.TestCase):
         resource.x = 10
       self.assertEqual(ref.checkout().x, 10)
     self.assertNotEqual(ref.digest, old_digest)
+
+  def test_modify_wrapped(self):
+    """Tests that modifying wrapped resources works."""
+    store = enact.Store()
+    with store:
+      ref = store.commit([0, 1, 2])
+      old_ref = ref.deep_copy_resource()
+      with ref.modify() as elems:
+        elems.append(3)
+      self.assertEqual(ref.checkout(), [0, 1, 2, 3])
+      self.assertNotEqual(ref, old_ref)
 
   def test_pack_none(self):
     """Tests packing the none resource."""
