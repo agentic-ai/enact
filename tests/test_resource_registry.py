@@ -100,3 +100,10 @@ class RegistryTest(unittest.TestCase):
     wrapped = enact.wrap(custom)
     assert isinstance(wrapped, CustomWrapper)
     self.assertEqual(enact.unwrap(wrapped), custom)
+
+  def test_wrap_nests(self):
+    """Tests that wrapping nests with custom types works."""
+    py_dict = {'a': [CustomType((1, 2)), {'test': CustomType((2, 3))}]}
+    wrapped = enact.wrap(py_dict)
+    assert isinstance(wrapped, enact.ResourceWrapperBase)
+    self.assertEqual(enact.unwrap(wrapped), py_dict)

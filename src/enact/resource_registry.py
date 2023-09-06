@@ -15,7 +15,7 @@
 """Type registration functionality to allow deserialization of resources."""
 
 from typing import (
-  Any, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar)
+  Any, Callable, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar)
 
 from enact import interfaces
 
@@ -72,12 +72,12 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     """Wrap a value directly."""
     assert isinstance(value, cls.wrapped_type()), (
       'Cannot wrap value of type {type(value)} with wrapper {cls}.')
-    return cls(value)
+    return cls(to_field_value(value))
 
   def unwrap(self) -> WrappedT:
     """Unwrap a value directly."""
     assert isinstance(self.wrapped, self.wrapped_type())
-    return self.wrapped
+    return from_field_value(self.wrapped)
 
 
 class NoneWrapper(FieldValueWrapper[None]):
@@ -227,9 +227,37 @@ def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
   return cls
 
 def wrap(value: Any) -> interfaces.ResourceBase:
-  """Wrap a value."""
+  """Wrap a value as a resource."""
   return Registry.get().wrap(value)
+
+def _ensure_str_key(s: Any) -> str:
+  """Ensure that a value is a string."""
+  if not isinstance(s, str):
+    raise ValueError(
+      f'Cannot auto-wrap a dictionary with non-str keys: '
+      f'{s} of type {type(s)}')
+  return s
+
+def to_field_value(value: Any) -> interfaces.FieldValue:
+  """Wrap a value as a field value."""
+  if isinstance(value, interfaces.PRIMITIVES):
+    return value
+  if isinstance(value, list):
+    return [to_field_value(x) for x in value]
+  if isinstance(value, dict):
+    return {_ensure_str_key(k): to_field_value(v) for k, v in value.items()}
+  return wrap(value)
 
 def unwrap(value: interfaces.ResourceBase) -> Any:
   """Wrap a value."""
   return Registry.get().unwrap(value)
+
+def from_field_value(value: interfaces.FieldValue) -> Any:
+  """Unwrap a field value into a python value."""
+  if isinstance(value, interfaces.ResourceBase):
+    return unwrap(value)
+  if isinstance(value, list):
+    return [from_field_value(x) for x in value]
+  if isinstance(value, dict):
+    return {k: from_field_value(v) for k, v in value.items()}
+  return value
