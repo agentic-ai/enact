@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the resource_registry module."""
+"""Tests for the resource_wrappers module."""
 
 from typing import cast
 import unittest
@@ -22,18 +22,17 @@ import PIL.Image
 
 import enact
 
+from enact import resource_wrappers
 
-class TestResourceTypes(unittest.TestCase):
-  """Tests all the basic resource types."""
+
+class TestResourceWrappers(unittest.TestCase):
+  """Tests all the non-fieldvalue wrappers."""
 
   TYPES = [
-    (enact.Int, 3),
-    (enact.Float, 2.5),
-    (enact.Bytes, b'babc'),
-    (enact.Str, 'abc'),
-    (enact.NPArray, np.array([0.0, 1.0, 2.0])),
-    (enact.Image, PIL.Image.new('RGB', (10, 10), 'red')),
-    (enact.List, [1, 2, 3]),
+    (resource_wrappers.NPArrayWrapper, np.array([0.0, 1.0, 2.0])),
+    (resource_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
+    (resource_wrappers.TupleWrapper, (1, 2, 3)),
+    (resource_wrappers.SetWrapper, {1, 2, 3}),
   ]
 
   def setUp(self):
@@ -44,11 +43,14 @@ class TestResourceTypes(unittest.TestCase):
     """Test storing and dereferencing a resource from a store."""
     for resource_type, value in self.TYPES:
       with self.subTest(resource_type=resource_type):
-        resource = cast(enact.ResourceBase, resource_type(value))
-        ref = self.store.commit(resource)
-        ref2 = self.store.commit(ref.checkout())
-        self.assertEqual(ref, ref2)
-
-        for v1, v2 in zip(resource.field_values(),
-                          ref2.checkout().field_values()):
-          self.assertEqual(v1, v2)
+        restored = self.store.commit(value).checkout()
+        self.assertIsInstance(restored, type(value))
+        if isinstance(restored, np.ndarray):
+          assert isinstance(value, np.ndarray)
+          self.assertSequenceEqual(restored.tolist(), value.tolist())
+        elif isinstance(restored, PIL.Image.Image):
+          assert isinstance(value, PIL.Image.Image)
+          self.assertSequenceEqual(list(restored.getdata()),
+                                   list(value.getdata()))
+        else:
+          self.assertEqual(restored, value)

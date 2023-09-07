@@ -15,10 +15,11 @@
 """Tests for the resource_registry module."""
 
 import dataclasses
-from typing import Tuple, Type
+from typing import Any, List, Tuple, Type
 import unittest
 
 import enact
+from enact import resource_registry
 
 @enact.register
 @dataclasses.dataclass
@@ -107,3 +108,35 @@ class RegistryTest(unittest.TestCase):
     wrapped = enact.wrap(py_dict)
     assert isinstance(wrapped, enact.ResourceWrapperBase)
     self.assertEqual(enact.unwrap(wrapped), py_dict)
+
+  def test_wrap_types(self):
+    """Tests that wrapping types works."""
+    type_nest = [int, [float, bytes]]
+    as_fields = resource_registry.to_field_value(type_nest)
+    self.assertEqual(
+      as_fields, [resource_registry.IntWrapper,
+                  [resource_registry.FloatWrapper,
+                   resource_registry.BytesWrapper]])
+    self.assertEqual(
+      resource_registry.from_field_value(as_fields), type_nest)
+
+  def test_deepcopy_primitives(self):
+    """Tests that deep copying primitives works."""
+    primitives = [1, 1.0, 'a', bytes([1, 2, 3]), True, False, None]
+    for p in primitives:
+      with self.subTest(str(p)):
+        self.assertEqual(resource_registry.deepcopy(p), p)
+
+  def test_deepcopy_nests(self):
+    """Tests that deep copying primitives works."""
+    nest: List[Any] = [[1, 2], {'a': [1, 2], 'b': True}]
+    copy = resource_registry.deepcopy(nest)
+    self.assertEqual(copy, nest)
+    self.assertIsNot(copy, nest)
+    self.assertIsNot(copy[0], nest[0])
+    self.assertIsNot(copy[1], nest[1])
+    self.assertIsNot(copy[1]['a'], nest[1]['a'])
+
+
+if __name__ == 'main':
+  unittest.main()

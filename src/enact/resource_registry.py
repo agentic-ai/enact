@@ -15,7 +15,7 @@
 """Type registration functionality to allow deserialization of resources."""
 
 from typing import (
-  Any, Callable, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar)
+  Any, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar, cast)
 
 from enact import interfaces
 
@@ -64,7 +64,7 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     if not type(self) is type(other):
       raise RegistryError(
         f'Cannot set fields from {type(other)} to {type(self)}.')
-    self.wrapped = other.deep_copy_resource().wrapped
+    self.wrapped = other.deepcopy_resource().wrapped
 
   @classmethod
   def wrap(cls: Type[FieldValueWrapperT],
@@ -135,7 +135,6 @@ class DictWrapper(FieldValueWrapper[dict]):
   def wrapped_type(cls) -> Type[dict]:
     return dict
 
-
 class Registry:
   """Registers resource types for deserialization."""
 
@@ -147,7 +146,6 @@ class Registry:
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
     self._wrapped_types: Dict[Type, Type[interfaces.ResourceWrapperBase]] = {}
     self._wrapper_types: Set[Type[interfaces.ResourceWrapperBase]] = set()
-    self.register(interfaces.NoneResource)
     self.register_wrapper(NoneWrapper)
     self.register_wrapper(IntWrapper)
     self.register_wrapper(FloatWrapper)
@@ -187,21 +185,53 @@ class Registry:
     self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
     self._wrapper_types.add(wrapper_type)
 
+  def get_wrapper_type(self, t: Type[WrappedT]) -> Optional[
+      Type[interfaces.ResourceWrapperBase[WrappedT]]]:
+    """Return a matching wrapper type if present."""
+    wrapper = self._wrapped_types.get(t)
+    if wrapper:
+      return cast(Type[interfaces.ResourceWrapperBase[WrappedT]], wrapper)
+    found: Optional[Type[interfaces.ResourceWrapperBase]] = None
+    for k, v in self._wrapped_types.items():
+      if issubclass(t, k):
+        if found:
+          raise RegistryError(
+            f'Found multiple wrappers for type {t}: {found} and {v}')
+        found = v
+    return found
+
   def wrap(self, value: Any) -> interfaces.ResourceBase:
     """Wrap a value if necessary."""
-    wrapper = self._wrapped_types.get(type(value))
-    if wrapper:
-      return wrapper.wrap(value)
     if isinstance(value, interfaces.ResourceBase):
       return value
-    raise RegistryError(
+    wrapper = self.get_wrapper_type(type(value))
+    if wrapper:
+      return wrapper.wrap(value)
+    raise interfaces.FieldTypeError(
       f'Cannot wrap value of type {type(value)}. Please register '
+      f'a ResourceWrapper for this type.')
+
+  def wrap_type(self, value: Type) -> Type[interfaces.ResourceBase]:
+    """Wrap a type if necessary."""
+    if issubclass(value, interfaces.ResourceBase):
+      return value
+    wrapper = self.get_wrapper_type(value)
+    if wrapper:
+      return wrapper
+    raise interfaces.FieldTypeError(
+      f'Cannot wrap type {value}. Please register '
       f'a ResourceWrapper for this type.')
 
   def unwrap(self, value: interfaces.ResourceBase) -> Any:
     """Unwrap a value if wrapped."""
     if isinstance(value, interfaces.ResourceWrapperBase):
       return value.unwrap()
+    return value
+
+  def unwrap_type(self, value: Type[interfaces.ResourceBase]) -> Type:
+    """Unwrap a type if wrapped."""
+    if issubclass(value, interfaces.ResourceWrapperBase):
+      return value.wrapped_type()
     return value
 
 
@@ -221,14 +251,37 @@ def register(cls: Type[ResourceT]) -> Type[ResourceT]:
   Registry.get().register(cls)
   return cls
 
+
 def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
   """Decorator for resource wrapper classes."""
   Registry.get().register_wrapper(cls)
   return cls
 
+
 def wrap(value: Any) -> interfaces.ResourceBase:
   """Wrap a value as a resource."""
   return Registry.get().wrap(value)
+
+
+def unwrap(value: interfaces.ResourceBase) -> Any:
+  """Wrap a value."""
+  return Registry.get().unwrap(value)
+
+
+def wrap_type(value: Type) -> Type[interfaces.ResourceBase]:
+  """Wrap a type as a resource."""
+  return Registry.get().wrap_type(value)
+
+
+def unwrap_type(value: Type[interfaces.ResourceBase]) -> Type:
+  """Wrap a type."""
+  return Registry.get().unwrap_type(value)
+
+
+def deepcopy(value: Any):
+  """Deep copy a value."""
+  return from_field_value(to_field_value(value))
+
 
 def _ensure_str_key(s: Any) -> str:
   """Ensure that a value is a string."""
@@ -238,6 +291,7 @@ def _ensure_str_key(s: Any) -> str:
       f'{s} of type {type(s)}')
   return s
 
+
 def to_field_value(value: Any) -> interfaces.FieldValue:
   """Wrap a value as a field value."""
   if isinstance(value, interfaces.PRIMITIVES):
@@ -246,16 +300,19 @@ def to_field_value(value: Any) -> interfaces.FieldValue:
     return [to_field_value(x) for x in value]
   if isinstance(value, dict):
     return {_ensure_str_key(k): to_field_value(v) for k, v in value.items()}
+  if isinstance(value, type):
+    return Registry.get().wrap_type(value)
   return wrap(value)
 
-def unwrap(value: interfaces.ResourceBase) -> Any:
-  """Wrap a value."""
-  return Registry.get().unwrap(value)
 
 def from_field_value(value: interfaces.FieldValue) -> Any:
   """Unwrap a field value into a python value."""
   if isinstance(value, interfaces.ResourceBase):
     return unwrap(value)
+  if (
+      isinstance(value, type) and
+      issubclass(value, interfaces.ResourceWrapperBase)):
+    return unwrap_type(value)
   if isinstance(value, list):
     return [from_field_value(x) for x in value]
   if isinstance(value, dict):

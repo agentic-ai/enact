@@ -21,7 +21,7 @@ import enact
 from enact import serialization
 from enact import resource_registry
 
-import random_value
+import random_value  # type: ignore
 
 @enact.register
 @dataclasses.dataclass

@@ -17,7 +17,7 @@
 import abc
 import functools
 import json
-from typing import Dict, Generic, Iterable, List, List, Tuple, Type, TypeVar, Union
+from typing import Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -44,7 +44,8 @@ ResourceDictValue = Union[
   Primitives,
   Type['ResourceBase'],
   List['ResourceDictValue'],
-  Dict[str, 'ResourceDictValue']]
+  Dict[str, 'ResourceDictValue'],
+  'ResourceDict']
 
 
 C = TypeVar('C', bound='ResourceBase')
@@ -147,11 +148,11 @@ class ResourceBase:
       f'Encountered unsupported resource '
       f'dict value type {type(value)}: {value}')
 
-  def deep_copy_resource(self: C) -> C:
+  def deepcopy_resource(self: C) -> C:
     """Create a deep-copy of the resource."""
     return self.from_resource_dict(self.to_resource_dict())
 
-  def to_resource_dict(self) -> 'ResourceDict':
+  def to_resource_dict(self: C) -> 'ResourceDict[C]':
     """Returns a ResourceDict dictionary representation."""
     result = ResourceDict(type(self))
     for field_name, value in self.field_items():
@@ -194,35 +195,6 @@ class ResourceDict(Generic[C], Dict[str, ResourceDictValue]):
   def to_resource(self) -> C:
     """Constructs the resource from the dictionary."""
     return self.type.from_resource_dict(self)
-
-
-# TODO: Remove this
-class NoneResource(ResourceBase):
-  """The None resource."""
-
-  @classmethod
-  def field_names(cls) -> Iterable[str]:
-    """Returns the names of the fields of the resource."""
-    return ()
-
-  def field_values(self) -> Iterable[FieldValue]:
-    """Return a list of field values, aligned with field_names."""
-    return ()
-
-  @classmethod
-  def from_fields(
-      cls: Type[C],
-      field_dict: Dict[str, FieldValue]) -> C:
-    """Constructs the resource from a value dictionary."""
-    assert not field_dict
-    return cls()
-
-  def set_from(self: C, other: C):
-    """Sets the fields of this resource from another resource."""
-    raise NotImplementedError(
-      f'Setting fields from another resource is not '
-      f'supported by type {type(self)}.')
-
 
 
 WrappedT = TypeVar('WrappedT')

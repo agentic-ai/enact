@@ -170,18 +170,18 @@ class StoreTest(unittest.TestCase):
     store = enact.Store()
     with store:
       ref = store.commit([0, 1, 2])
-      old_ref = ref.deep_copy_resource()
+      old_ref = ref.deepcopy_resource()
       with ref.modify() as elems:
         elems.append(3)
       self.assertEqual(ref.checkout(), [0, 1, 2, 3])
       self.assertNotEqual(ref, old_ref)
 
   def test_pack_none(self):
-    """Tests packing the none resource."""
+    """Tests packing none."""
     store = enact.Store()
-    resource = interfaces.NoneResource()
-    ref = store.commit(resource)
-    packed = ref.pack(resource)
+    value = None
+    ref = store.commit(value)
+    packed = ref.pack(value)
     ref.verify(packed)
 
   def test_file_backend(self):

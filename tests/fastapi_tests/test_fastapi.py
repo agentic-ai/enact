@@ -44,7 +44,7 @@ class MyInputInvokable(enact.Invokable):
     return MyResponse(value.x + 1, value.y + 1.0)
 
 
-@enact.typed_invokable(input_type=enact.NoneResource,
+@enact.typed_invokable(input_type=type(None),
                        output_type=MyResponse)
 class MyInvokable(enact.Invokable):
   def call(self):

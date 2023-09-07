@@ -27,40 +27,40 @@ import enact
 from enact import invocations
 
 
-@enact.typed_invokable(enact.Int, enact.Str)
+@enact.typed_invokable(int, str)
 @dataclasses.dataclass
 class IntToStr(enact.Invokable):
   """An invokable that converts an int to a string."""
   salt: str = ''
 
-  def call(self, value: enact.Int) -> enact.Str:
-    return enact.Str(str(value) + self.salt)
+  def call(self, value: int) -> str:
+    return str(value) + self.salt
 
 
-@enact.typed_invokable(enact.Int, enact.Str)
+@enact.typed_invokable(int, str)
 class WrongOutputType(enact.Invokable):
 
-  def call(self, value: enact.Int) -> enact.Int:
+  def call(self, value: int) -> int:
     return value
 
 
 @dataclasses.dataclass
-@enact.typed_invokable(enact.Int, enact.Int)
+@enact.typed_invokable(int, int)
 class AddOne(enact.Invokable):
   fail: bool = False
-  def call(self, input_resource: enact.Int) -> enact.Int:
+  def call(self, input_resource: int) -> int:
     if self.fail:
       raise ValueError('fail')
-    return enact.Int(input_resource + 1)
+    return input_resource + 1
 
 
 @dataclasses.dataclass
 class Fail(enact.Invokable):
-  def call(self, arg: enact.ResourceBase) -> enact.Int:
+  def call(self, arg: enact.ResourceBase) -> int:
     raise ValueError('fail')
 
 
-@enact.typed_invokable(enact.Int, enact.Int)
+@enact.typed_invokable(int, int)
 @dataclasses.dataclass
 class NestedFunction(enact.Invokable):
   """A nested function that repeatedly calls another invokable."""
@@ -68,7 +68,7 @@ class NestedFunction(enact.Invokable):
   iter: int = 10
   fail_on: Optional[int] = None
 
-  def call(self, input_resource: enact.Int) -> enact.Int:
+  def call(self, input_resource: int) -> int:
     for i in range(self.iter):
       if i == self.fail_on:
         input_resource = Fail()(input_resource)
@@ -92,9 +92,9 @@ class InvocationsTest(unittest.TestCase):
   def test_typed_invokable(self):
     """"Test that the decorator works as expected."""
     fun = IntToStr('salt')
-    self.assertEqual(fun.get_input_type(), enact.Int)
-    self.assertEqual(fun.get_output_type(), enact.Str)
-    output = fun.call(enact.Int(1))
+    self.assertEqual(fun.get_input_type(), int)
+    self.assertEqual(fun.get_output_type(), str)
+    output = fun.call(1)
     # Input and output types should not show up as fields.
     self.assertEqual(list(fun.field_names()), ['salt'])
     # The following line should typecheck correctly.
@@ -103,12 +103,12 @@ class InvocationsTest(unittest.TestCase):
   def test_typecheck_input(self):
     fun = IntToStr('salt')
     with self.assertRaises(TypeError):
-      fun(enact.Str('1'))
+      fun('1')
 
   def test_typecheck_output(self):
     fun = WrongOutputType()
     with self.assertRaises(TypeError):
-      fun(enact.Str('1'))
+      fun('1')
 
   def test_auto_input_args(self):
     self.assertEqual(
@@ -122,15 +122,15 @@ class InvocationsTest(unittest.TestCase):
     with self.store:
       fun = IntToStr('salt')
       invocation = fun.invoke(
-        enact.commit(enact.Int(1)))
+        enact.commit(1))
       want: enact.Invocation = enact.Invocation(
         request=enact.commit(
           enact.Request(enact.commit(fun),
-                        enact.commit(enact.Int(1)))),
+                        enact.commit(1))),
         response=enact.commit(
           enact.Response(
             invokable=enact.commit(fun),
-            output=enact.commit(enact.Str('1salt')),
+            output=enact.commit('1salt'),
             raised=None,
             raised_here=False,
             children=[])))
@@ -146,7 +146,7 @@ class InvocationsTest(unittest.TestCase):
     """Test invoking a nested function."""
     with self.store:
       invocation = NestedFunction().invoke(
-        enact.commit(enact.Int(1)))
+        enact.commit(1))
       output = invocation.get_output()
       self.assertEqual(output, 11)
       self.assertEqual(len(list(invocation.get_children())), 10)
@@ -155,19 +155,10 @@ class InvocationsTest(unittest.TestCase):
         output = child.get_output()
         self.assertEqual(output, i + 2)
 
-  def test_invoke_output_error(self):
-    """Test that error is raised if a non-resource object is returned."""
-    class BadInvokable(enact.Invokable):
-      def call(self, unused_input: enact.Int) -> int:
-        return 1
-    with self.store:
-      with self.assertRaises(TypeError):
-        BadInvokable().invoke(enact.commit(enact.Int(1)))
-
   def test_invoke_fail(self):
     with self.store:
       invocation = NestedFunction(fail_on=3).invoke(
-        enact.commit(enact.Int(1)))
+        enact.commit(1))
       self.assertFalse(invocation.successful())
       exception = invocation.get_raised()
       self.assertIsInstance(
@@ -193,15 +184,15 @@ class InvocationsTest(unittest.TestCase):
     with mock.patch.object(time, 'time_ns', return_value=0):
       with self.store as store:
         fun = IntToStr()
-        with invocations.Builder(fun, store.commit(enact.Int(1))) as builder:
+        with invocations.Builder(fun, store.commit(1)) as builder:
           # Enter an unrelated context.
           nested = NestedFunction()
-          inner_invocation = nested.invoke(store.commit(enact.Int(1)))
+          inner_invocation = nested.invoke(store.commit(1))
           # The invocation should not be tracked in the builder.
           # pylint: disable=protected-access
           self.assertEqual(builder._children, None)
         # Redo the invocation outside the builder.
-        outer_invocation = nested.invoke(store.commit(enact.Int(1)))
+        outer_invocation = nested.invoke(store.commit(1))
         # Ensure that executing in the misleading context made no difference.
         self.assertEqual(outer_invocation, inner_invocation)
 
@@ -215,7 +206,7 @@ class InvocationsTest(unittest.TestCase):
 
     with self.store as store:
       fun = NestedFunction()
-      meta_invocation = MetaInvoke(fun).invoke(store.commit(enact.Int(1)))
+      meta_invocation = MetaInvoke(fun).invoke(store.commit(1))
       self.assertEqual(
         len(list(meta_invocation.get_children())), 0)
       invocation = meta_invocation.get_output()
@@ -230,7 +221,7 @@ class InvocationsTest(unittest.TestCase):
         raise ValueError('foo')
     with self.store as store:
       fun = PythonErrorOnInvoke()
-      invocation = fun.invoke(store.commit(enact.Int(5)))
+      invocation = fun.invoke(store.commit(5))
       self.assertIsInstance(
         invocation.get_raised(),
         enact.WrappedException)
@@ -243,14 +234,14 @@ class InvocationsTest(unittest.TestCase):
     class ExpectValueError(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
         try:
-          PythonErrorOnInvoke()(enact.Int(3))
+          PythonErrorOnInvoke()(3)
         except ValueError:
-          return enact.Str('Got value error')
+          return 'Got value error'
         raise enact.ExceptionResource('Expected ValueError')
 
     with self.store as store:
       fun = ExpectValueError()
-      invocation = fun.invoke(store.commit(enact.Int(5)))
+      invocation = fun.invoke(store.commit(5))
       self.assertEqual(
         invocation.get_output(),
         'Got value error')
@@ -272,7 +263,7 @@ class InvocationsTest(unittest.TestCase):
       subcall_1 = SubCall(store.commit(error_fun))
       subcall_2 = SubCall(store.commit(subcall_1))
 
-      invocation = subcall_2.invoke(store.commit(enact.Int(5)))
+      invocation = subcall_2.invoke(store.commit(5))
       self.assertFalse(invocation.get_raised_here())
       (subinvocation,) = invocation.get_children()
       self.assertFalse(subinvocation.get_raised_here())
@@ -298,12 +289,12 @@ class InvocationsTest(unittest.TestCase):
       error_fun = PythonErrorOnInvoke()
       subcall_1 = SubCall(store.commit(error_fun))
       subcall_2 = SubCall(store.commit(subcall_1))
-      invocation = subcall_2.invoke(store.commit(enact.Int(5)))
+      invocation = subcall_2.invoke(store.commit(5))
       self.assertEqual(native_errors_raised, 1)
       with self.assertRaises(ValueError):
         with invocations.ReplayContext(subinvocations=[
             enact.commit(invocation)]):
-          subcall_2(enact.Int(5))
+          subcall_2(5)
       self.assertEqual(native_errors_raised, 2)
 
 
@@ -326,18 +317,18 @@ class InvocationsTest(unittest.TestCase):
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: enact.Int(100)):
-        result = fun(enact.Int(0))
+          exception_override=lambda x: 100):
+        result = fun(0)
       self.assertEqual(result, 106)
 
   def test_replay_invocation(self):
     """Test replaying an invocation."""
     fun = NestedFunction()
     with self.store:
-      invocation = fun.invoke(enact.commit(enact.Int(0)))
+      invocation = fun.invoke(enact.commit(0))
       replay = invocation.replay()
       self.assertEqual(invocation, replay)
 
@@ -345,18 +336,18 @@ class InvocationsTest(unittest.TestCase):
     """Test rewinding a call."""
     leaf_calls = 0
 
-    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    @enact.typed_invokable(type(None), int)
     class Leaf(enact.Invokable):
       def call(self):
         nonlocal leaf_calls
         leaf_calls += 1
-        return enact.Int(1)
+        return 1
 
-    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    @enact.typed_invokable(type(None), int)
     class Nested(enact.Invokable):
       def call(self):
         leaf = Leaf()
-        return enact.Int(leaf() + leaf() + leaf())
+        return leaf() + leaf() + leaf()
 
     fun = Nested()
     with self.store:
@@ -381,13 +372,13 @@ class InvocationsTest(unittest.TestCase):
       counter = Counter()
       fun = NestedFunction(counter, iter=10)
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       self.assertEqual(counter.call_count, 10)
 
       # Modify output to ensure we got a replay and
       # not a reexecution.
       with invocation.response.modify() as response:
-        response.output = enact.commit(enact.Int(100))
+        response.output = enact.commit(100)
 
       fun.fun = Counter()
       result = invocation.replay()
@@ -399,17 +390,17 @@ class InvocationsTest(unittest.TestCase):
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       with invocation.response.modify() as response:
         del response.children[4:]
         with response.children[-1].modify() as child:
           with child.response.modify() as child_response:
             assert child_response.raised
             child_response.raised = None
-            child_response.output = enact.commit(enact.Int(100))
+            child_response.output = enact.commit(100)
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)]):
-        result = fun(enact.Int(0))
+        result = fun(0)
       self.assertEqual(result, 106)
 
   def test_replay_call_on_mismatch_nonstrict(self):
@@ -417,52 +408,52 @@ class InvocationsTest(unittest.TestCase):
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: enact.Int(100), strict=False):
+          exception_override=lambda x: 100, strict=False):
         with self.assertRaises(ValueError):
           # Exception override is not active since we're ignoring the
           # replay.
-          fun(enact.Int(1))
+          fun(1)
 
   def test_replay_call_on_mismatch_strict(self):
     """Test strict replays raise."""
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: enact.Int(100), strict=True):
+          exception_override=lambda x: 100, strict=True):
         with self.assertRaises(enact.ReplayError):
-          fun(enact.Int(1))
+          fun(1)
 
   def test_invoke_with_replay(self):
     """Test replays are ignored if arguments don't match."""
     fun = NestedFunction(fail_on=3)
     with self.store:
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)))
+        enact.commit(0))
       invocation = fun.invoke(
-        enact.commit(enact.Int(0)),
+        enact.commit(0),
         replay_from=invocation,
-        exception_override=lambda x: enact.Int(100))
+        exception_override=lambda x: 100)
       self.assertEqual(invocation.get_output(), 106)
 
   def test_request_input(self):
     """Tests the RequestInput invokable."""
-    fun = NestedFunction(fun=enact.RequestInput(enact.Str), iter=2)
+    fun = NestedFunction(fun=enact.RequestInput(str), iter=2)
     with self.store:
       inputs = ['foo', 'bar', 'bish']
-      invocation = fun.invoke(enact.commit(enact.Str(inputs[0])))
+      invocation = fun.invoke(enact.commit(inputs[0]))
       for cur_input, next_input in zip(inputs[:-1], inputs[1:]):
         raised = invocation.get_raised()
         assert isinstance(raised, enact.InputRequest)
         self.assertEqual(
-          cast(enact.Str, raised.for_resource.checkout()), cur_input)
+          cast(str, raised.for_value.checkout()), cur_input)
         invocation = raised.continue_invocation(
-          invocation, enact.Str(next_input))
+          invocation, next_input)
       self.assertEqual(invocation.get_output(), 'bish')
       child_outputs = [
         c.get_output() for c in invocation.get_children()]
@@ -471,34 +462,34 @@ class InvocationsTest(unittest.TestCase):
   def test_request_input_fun(self):
     """Tests the request_input function."""
     class MyInvokable(enact.Invokable):
-      def call(self, value: enact.Int):
-        return enact.Int(enact.request_input(enact.Int) + value)
+      def call(self, value: int):
+        return enact.request_input(int) + value
     with self.store:
-      invocation = MyInvokable().invoke(enact.commit(enact.Int(3)))
+      invocation = MyInvokable().invoke(enact.commit(3))
       raised = invocation.get_raised()
       assert isinstance(raised, enact.InputRequest)
-      invocation = raised.continue_invocation(invocation, enact.Int(5))
+      invocation = raised.continue_invocation(invocation, 5)
       self.assertEqual(invocation.get_output(), 8)
 
   def test_input_requested_outside_invocation(self):
     with self.assertRaises(enact.InputRequestOutsideInvocation):
-      enact.RequestInput(enact.Str)(enact.Str('foo'))
+      enact.RequestInput(str)('foo')
 
   def test_request_input_class(self):
     with self.store:
-      fun = enact.RequestInput(enact.Str, enact.Str('Context'))
-      invocation = fun.invoke(enact.commit(enact.Str('foo')))
+      fun = enact.RequestInput(str, 'Context')
+      invocation = fun.invoke(enact.commit('foo'))
       raised = invocation.get_raised()
       assert isinstance(raised, enact.InputRequest)
       assert raised.context == 'Context'
-      self.assertEqual(raised.requested_type, enact.Str)
+      self.assertEqual(raised.requested_type, str)
 
   def test_empty_call_args(self):
-    """Tests that empty call args are ok for NoneResource inputs."""
-    @enact.typed_invokable(enact.NoneResource, enact.Str)
+    """Tests that empty call args are ok for None inputs."""
+    @enact.typed_invokable(type(None), str)
     class TextInput(enact.Invokable):
       def call(self):
-        return enact.Str('Foo')
+        return 'Foo'
 
     with self.store:
       fun = TextInput()
@@ -509,37 +500,37 @@ class InvocationsTest(unittest.TestCase):
     """Tests that send without next fails on invokable generator."""
     with self.store:
       inv_gen = enact.InvocationGenerator(
-        IntToStr(), enact.commit(enact.Int(3)))
+        IntToStr(), enact.commit(3))
       with self.assertRaisesRegex(TypeError, '.*non-None.*'):
-        inv_gen.send(enact.Int(3))
+        inv_gen.send(3)
 
   def test_invokable_generator_send_none_without_next(self):
     """Tests that send None without next works."""
     with self.store:
       inv_gen = enact.InvocationGenerator(
-        IntToStr(), enact.commit(enact.Int(3)))
+        IntToStr(), enact.commit(3))
       with self.assertRaises(StopIteration):
         inv_gen.send(None)
 
   def test_invokable_generator_send_flow(self):
     """Test an invokable generator in a send-based flow."""
-    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    @enact.typed_invokable(type(None), int)
     class SumUserRequests(enact.Invokable):
       def call(self):
-        return enact.Int(
-          enact.request_input(enact.Int) +
-          enact.request_input(enact.Int) +
-          enact.request_input(enact.Int))
+        return (
+          enact.request_input(int) +
+          enact.request_input(int) +
+          enact.request_input(int))
 
     with self.store:
       inv_gen = enact.InvocationGenerator(
-        SumUserRequests(), enact.commit(enact.NoneResource()))
+        SumUserRequests(), enact.commit(None))
       input_request = next(inv_gen)
       for i in range(5):
         assert isinstance(input_request, enact.InputRequest)
         self.assertFalse(inv_gen.complete)
         try:
-          input_request = inv_gen.send(enact.Int(i))
+          input_request = inv_gen.send(i)
         except StopIteration:
           break
       self.assertEqual(
@@ -547,20 +538,20 @@ class InvocationsTest(unittest.TestCase):
 
   def test_invokable_generator_set_input_flow(self):
     """Test an invokable generator in a send-based flow."""
-    @enact.typed_invokable(enact.NoneResource, enact.Int)
+    @enact.typed_invokable(type(None), int)
     class SumUserRequests(enact.Invokable):
       def call(self):
-        return enact.Int(
-          enact.request_input(enact.Int) +
-          enact.request_input(enact.Int) +
-          enact.request_input(enact.Int))
+        return (
+          enact.request_input(int) +
+          enact.request_input(int) +
+          enact.request_input(int))
 
     with self.store:
       inv_gen = enact.InvocationGenerator(
-        SumUserRequests(), enact.commit(enact.NoneResource()))
+        SumUserRequests(), enact.commit(None))
       for i, _ in enumerate(inv_gen):
         self.assertFalse(inv_gen.complete)
-        inv_gen.set_input(enact.Int(i))
+        inv_gen.set_input(i)
       self.assertEqual(
         inv_gen.invocation.get_output(), 0 + 1 + 2)
 
@@ -578,15 +569,15 @@ class AsyncWrapper(enact.AsyncInvokable):
     if isinstance(fun, enact.AsyncInvokable):
       return await fun(*args)
 
-@enact.typed_invokable(enact.Float, enact.Float)
+@enact.typed_invokable(float, float)
 @dataclasses.dataclass
 class Sleep(enact.AsyncInvokable):
   """Calls asyncio.sleep and returns actual time slept."""
-  async def call(self, value: enact.Float) -> enact.Float:
+  async def call(self, value: float) -> float:
     before = time.time()
     await asyncio.sleep(value)
     after = time.time()
-    return enact.Float(after - before)
+    return float(after - before)
 
 
 @enact.register
@@ -609,42 +600,42 @@ class RunawayTasks(enact.AsyncInvokable):
     sleeps = [sleep(i * 0.1) for i in range(10)]
     await asyncio.wait(sleeps, timeout=0.2)
 
-@enact.typed_invokable(enact.NoneResource, enact.Int)
+@enact.typed_invokable(type(None), int)
 class AsyncRollDie(enact.AsyncInvokable):
   async def call(self):
     await asyncio.sleep(0.1 * random.random())
-    return enact.Int(random.randint(1, 6))
+    return random.randint(1, 6)
 
 
-@enact.typed_invokable(enact.Int, enact.Int)
+@enact.typed_invokable(int, int)
 class AsyncRollConcurrentDice(enact.AsyncInvokable):
-  async def call(self, n: enact.Int):
+  async def call(self, n: int):
     result = await asyncio.gather(
       *[AsyncRollDie()() for _ in range(n)])
-    return enact.Int(sum(result))
+    return sum(result)
 
 
-@enact.typed_invokable(enact.NoneResource, enact.NoneResource)
+@enact.typed_invokable(type(None), type(None))
 class AsyncFail(enact.AsyncInvokable):
   async def call(self):
     await asyncio.sleep(0.01)
     raise ValueError('AsyncFail')
 
 
-@enact.typed_invokable(enact.NoneResource, enact.List)
+@enact.typed_invokable(type(None), list)
 @dataclasses.dataclass
 class Gather(enact.AsyncInvokable):
   """Calls asyncio.gather on a list of invokables."""
-  invokables: List
+  invokables: list
 
   async def call(self):
     results = await asyncio.gather(
-      *[i(enact.NoneResource()) for i in self.invokables],
+      *[i(None) for i in self.invokables],
       return_exceptions=True)
     for r in results:
       if isinstance(r, Exception):
         raise r
-    return enact.List(results)
+    return list(results)
 
 
 class AsyncInvocationsTest(unittest.TestCase):
@@ -659,33 +650,33 @@ class AsyncInvocationsTest(unittest.TestCase):
   def test_call(self):
     """Tests calling an async invokable directly."""
     fun = AsyncWrapper(IntToStr())
-    result = asyncio.run(fun(enact.Int(3)))
+    result = asyncio.run(fun(3))
     self.assertEqual(result, '3')
 
   def test_invoke(self):
     """Tests basic invocations."""
     fun = AsyncWrapper(IntToStr())
     with self.store:
-      result = asyncio.run(fun.invoke(enact.commit(enact.Int(3))))
+      result = asyncio.run(fun.invoke(enact.commit(3)))
       self.assertEqual(
         result,
         enact.Invocation(
           enact.commit(enact.Request(
             enact.commit(fun),
-            enact.commit(enact.Int(3)))),
+            enact.commit(3))),
           enact.commit(enact.Response(
             enact.commit(fun),
-            enact.commit(enact.Str('3')),
+            enact.commit('3'),
             None,
             False,
             [
               enact.commit(enact.Invocation(
                 enact.commit(enact.Request(
                   enact.commit(IntToStr()),
-                  enact.commit(enact.Int(3)))),
+                  enact.commit(3))),
                 enact.commit(enact.Response(
                   enact.commit(IntToStr()),
-                  enact.commit(enact.Str('3')),
+                  enact.commit('3'),
                   None,
                   False,
                   []))
@@ -699,7 +690,7 @@ class AsyncInvocationsTest(unittest.TestCase):
     fun = AsyncWrapper(AsyncWrapper(IntToStr()))
     with self.store:
       invocation = asyncio.run(fun.invoke(
-        enact.commit(enact.Int(3))))
+        enact.commit(3)))
       self.assertEqual(invocation.get_output(), '3')
 
   def test_invoke_async_with_task(self):
@@ -707,7 +698,7 @@ class AsyncInvocationsTest(unittest.TestCase):
     fun = AwaitInTask(Sleep())
     with self.store:
       invocation = asyncio.run(fun.invoke(
-        enact.commit(enact.Float(0.01))))
+        enact.commit(0.01)))
       self.assertGreater(invocation.get_output(), 0.0)
 
   def test_invoke_async_with_runaway_task(self):
@@ -720,7 +711,7 @@ class AsyncInvocationsTest(unittest.TestCase):
   def test_simple_replay_async(self):
     fun = AsyncRollConcurrentDice()
     with self.store:
-      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      invocation = asyncio.run(fun.invoke(enact.commit(20)))
       replay = asyncio.run(invocation.replay_async())
       self.assertEqual(invocation, replay)
 
@@ -728,7 +719,7 @@ class AsyncInvocationsTest(unittest.TestCase):
     """Tests async replays."""
     fun = AsyncRollConcurrentDice()
     with self.store:
-      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      invocation = asyncio.run(fun.invoke(enact.commit(20)))
       rolls = [c.get_output() for c in invocation.get_children()]
       self.assertEqual(len(rolls), 20)
 
@@ -748,9 +739,9 @@ class AsyncInvocationsTest(unittest.TestCase):
     """Tests async replays using calls."""
     fun = AsyncRollConcurrentDice()
     with self.store:
-      invocation = asyncio.run(fun.invoke(enact.commit(enact.Int(20))))
+      invocation = asyncio.run(fun.invoke(enact.commit(20)))
       with enact.ReplayContext([enact.commit(invocation)]):
-        result = asyncio.run(fun(enact.Int(20)))
+        result = asyncio.run(fun(20))
       self.assertEqual(invocation.get_output(), result)
 
   def test_replay_async_multiple_exceptions(self):
@@ -764,29 +755,29 @@ class AsyncInvocationsTest(unittest.TestCase):
   def test_continue_invocation_async(self):
     """Tests that input requests can be continued."""
     # Request ten integers.
-    fun = Gather([AsyncWrapper(enact.RequestInput(enact.Int))
+    fun = Gather([AsyncWrapper(enact.RequestInput(int))
                   for _ in range(10)])
     with self.store:
-      invocation = asyncio.run(fun.invoke(enact.commit(enact.NoneResource())))
+      invocation = asyncio.run(fun.invoke(enact.commit(None)))
       input_request = invocation.get_raised()
       assert isinstance(input_request, enact.InputRequest)
       invocation = asyncio.run(input_request.continue_invocation_async(
-        invocation, enact.Int(2)))
+        invocation, 2))
       self.assertEqual(
         invocation.get_output(),
-        [enact.Int(2) for _ in range(10)])
+        [2 for _ in range(10)])
 
   def test_continue_invocation_async_targeted(self):
     """Tests that input requests can be continued with different values."""
-    fun = Gather([AsyncWrapper(enact.RequestInput(enact.Int, i))
+    fun = Gather([AsyncWrapper(enact.RequestInput(int, i))
                   for i in range(10)])
     with self.store:
-      invocation = asyncio.run(fun.invoke(enact.commit(enact.NoneResource())))
+      invocation = asyncio.run(fun.invoke(enact.commit(None)))
       self.assertIsInstance(invocation.get_raised(), enact.InputRequest)
       def exception_override(exception_ref):
         input_request = exception_ref()
         assert isinstance(input_request, enact.InputRequest)
         context = cast(int, input_request.context)
-        return enact.Int(context + 1)
+        return context + 1
       invocation = asyncio.run(invocation.replay_async(exception_override))
       self.assertEqual(invocation.get_output(), list(range(1, 11)))

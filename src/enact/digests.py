@@ -15,7 +15,7 @@
 """Computes hash digests of resources."""
 
 import hashlib
-from typing import Any, List, Mapping, Sequence, Type, Union
+from typing import Any, Iterable, List, Mapping, Sequence, Tuple, Type, Union
 
 from enact import interfaces
 
@@ -52,6 +52,7 @@ def _digest(
   stack.append(id(value))
   if isinstance(value, (interfaces.ResourceBase,
                         interfaces.ResourceDict)):
+    items: Iterable[Tuple[str, Value]]
     if isinstance(value, interfaces.ResourceBase):
       res_type = type(value)
       # Use alphabetical ordering.

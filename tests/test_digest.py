@@ -16,7 +16,7 @@
 
 import unittest
 
-from enact import digests
+from enact import digests, resource_registry
 from enact import interfaces
 
 from tests import random_value
@@ -34,7 +34,7 @@ class DigestTest(unittest.TestCase):
 
   def test_none_digest(self):
     """Ensures that none has the same digest as dict or resource."""
-    none = interfaces.NoneResource()
+    none = resource_registry.wrap(None)
     resource_digest = digests.digest(none)
     dict_digest = digests.digest(none.to_resource_dict())
     self.assertEqual(resource_digest, dict_digest)
