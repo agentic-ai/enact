@@ -125,7 +125,7 @@ class JsonSerializer(Serializer):
     resource_class = self._registry.lookup(type_id)
     return interfaces.ResourceDict(resource_class, self.from_json(fields))
 
-  def from_json(self, value: Json) -> interfaces.FieldValue:
+  def from_json(self, value: Json) -> interfaces.ResourceDictValue:
     """Turn a json encodable dictionary into a field value."""
     # Check encoded resource:
     type_id_key = self._escape('res')

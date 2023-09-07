@@ -16,10 +16,11 @@
 
 import abc
 import dataclasses
-from typing import Iterable, Mapping, Type, TypeVar
+from typing import Dict, Iterable, Mapping, Type, TypeVar
 
 from enact import digests
 from enact import interfaces
+from enact import resource_registry
 
 
 FieldValue = interfaces.FieldValue
@@ -36,7 +37,7 @@ class Resource(interfaces.ResourceBase):
   """
 
   @classmethod
-  def type_descr(cls) -> Mapping[str, interfaces.Json]:
+  def type_descr(cls) -> Dict[str, interfaces.Json]:
     """Returns a unique identifier for the type."""
     descr = super().type_descr()
     assert isinstance(descr, dict)
@@ -50,12 +51,15 @@ class Resource(interfaces.ResourceBase):
 
   def field_values(self) -> Iterable[FieldValue]:
     """Return a list of field values, aligned with field_names."""
-    return (getattr(self, f) for f in self.field_names())
+    return (resource_registry.to_field_value(
+      getattr(self, f)) for f in self.field_names())
 
   @classmethod
   def from_fields(cls: Type[C],
                   field_values: Mapping[str, FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
+    field_values = {k: resource_registry.from_field_value(v)
+                    for k, v in field_values.items()}
     return cls(**field_values)
 
   def set_from(self: C, other: C):
@@ -66,7 +70,7 @@ class Resource(interfaces.ResourceBase):
     """
     if not type(self) is type(other):  # pylint: disable=unidiomatic-typecheck
       raise TypeError(f'Cannot set_from {type(other)} into {type(self)}.')
-    copy = other.deep_copy_resource()
+    copy = other.deepcopy_resource()
     for field in dataclasses.fields(self):
       setattr(self, field.name, getattr(copy, field.name))
 

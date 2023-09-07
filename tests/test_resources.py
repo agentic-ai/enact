@@ -16,7 +16,7 @@
 
 
 import dataclasses
-from typing import Any
+from typing import Any, Type
 import unittest
 
 import enact
@@ -83,6 +83,43 @@ class ResourceTest(unittest.TestCase):
       a: Any
     self.assertEqual(type_id, R.type_id())
 
+  def test_field_wrapping(self):
+    """Tests field wrapping."""
+    class Custom:
+      def __init__(self, x: int):
+        self.x = x
+
+    @enact.register_wrapper
+    @dataclasses.dataclass
+    class CustomWrapper(enact.ResourceWrapper[Custom]):
+      x: int
+      @classmethod
+      def wrap(cls, wrapped: Custom) -> 'CustomWrapper':
+        return cls(wrapped.x)
+
+      def unwrap(self) -> Custom:
+        return Custom(self.x)
+
+      @classmethod
+      def wrapped_type(cls) -> Type[Custom]:
+        return Custom
+
+    @enact.register
+    @dataclasses.dataclass
+    class CustomFieldsResource(enact.Resource):
+      """Tests a resource with custom field types."""
+      w: Custom
+      i: int
+
+    r = CustomFieldsResource(Custom(1), 2)
+    as_dict = r.to_resource_dict()
+    w_dict = as_dict['w']
+    assert isinstance(w_dict, enact.ResourceDict)
+    self.assertEqual(w_dict.type, CustomWrapper)
+    rebuilt = as_dict.to_resource()
+    self.assertEqual(r.w.x, rebuilt.w.x)
+    self.assertEqual(r.i, rebuilt.i)
+
 class RefTest(unittest.TestCase):
 
   def test_digest_identical(self):
@@ -140,7 +177,7 @@ class RefTest(unittest.TestCase):
     """Tests that the resource can be deep-copied."""
     a = SimpleResource(SimpleResource(1, 2, 3), [4, None],
                        {'a': 0.0, 'b': [True, False]})
-    b = a.deep_copy_resource()
+    b = a.deepcopy_resource()
     self.assertEqual(a, b)
     self.assertNotEqual(id(a), id(b))
     self.assertNotEqual(id(a.a), id(b.a))

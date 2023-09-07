@@ -14,9 +14,9 @@
 """Pretty-printing for resources and references."""
 
 import dataclasses
-from typing import Callable, List, Mapping, Optional, Sequence, Set, Tuple, Type
+from typing import Any, Callable, List, Optional, Set, Tuple, Type
 
-from enact import interfaces
+from enact import interfaces, resource_registry
 from enact import references
 
 
@@ -40,10 +40,11 @@ class PPrinter:
     self._formatters: List[Tuple[
         Type, Callable[[interfaces.FieldValue, int], PPValue]]] = [
       (str, self.from_primitive),
+      (bytes, self.from_primitive),
       (references.Ref, self.from_ref),
       (interfaces.ResourceBase, self.from_resource),
-      (Mapping, self.from_mapping),
-      (Sequence, self.from_sequence),
+      (dict, self.from_dict),
+      (list, self.from_list),
       (type, self.from_type),
     ]
 
@@ -66,13 +67,13 @@ class PPrinter:
       return repr(v)
     return str(v)
 
-  def from_sequence(self, v: interfaces.FieldValue, depth: int) -> PPValue:
-    assert isinstance(v, Sequence)
+  def from_list(self, v: interfaces.FieldValue, depth: int) -> PPValue:
+    assert isinstance(v, list)
     return PPValue(
       '', [self.pvalue(item, depth + 1) for item in v], '[', ']')
 
-  def from_mapping(self, v: interfaces.FieldValue, depth: int) -> PPValue:
-    assert isinstance(v, Mapping)
+  def from_dict(self, v: interfaces.FieldValue, depth: int) -> PPValue:
+    assert isinstance(v, dict)
     return PPValue(
       '',
       [PPValue(key, [self.pvalue(item, depth + 1)]) for key, item in v.items()],
@@ -112,12 +113,13 @@ class PPrinter:
     return PPValue(self.primitive_to_str(v), [])
 
   def pvalue(
-      self, v: interfaces.FieldValue, depth: int=0) -> PPValue:
+      self, v: Any, depth: int=0) -> PPValue:
     """Produces a nested string value for pretty-printing."""
+    field_value = resource_registry.to_field_value(v)
     for t, formatter in self._formatters:
-      if isinstance(v, t):
-        return formatter(v, depth)
-    return self.from_primitive(v, depth)
+      if isinstance(field_value, t):
+        return formatter(field_value, depth)
+    return self.from_primitive(field_value, depth)
 
   def _merge(self, v: PPValue) -> List[Tuple[int, str]]:
     """Recursively merge pvalues."""
@@ -127,7 +129,7 @@ class PPrinter:
         (d + 1, merged_c) for d, merged_c in self._merge(c)]
     result[-1] = (result[-1][0], result[-1][1] + v.close)
     if len(result) == 2:
-      result = [(result[0][0], result[0][1] + ' ' + result[1][1])]
+      result = [(result[0][0], result[0][1] + ': ' + result[1][1])]
     return result
 
   def register(
@@ -137,30 +139,30 @@ class PPrinter:
     """Register a new formatter."""
     self._formatters.insert(0, (t, formatter))
 
-  def pformat(self, v: interfaces.FieldValue) -> str:
-    """Return a pretty string for a field value."""
+  def pformat(self, v: Any) -> str:
+    """Return a pretty string for an enact value."""
     self._seen_refs.clear()
-    pvalue = self._merge(self.pvalue(v, ))
+    pvalue = self._merge(self.pvalue(v))
     return '\n'.join(
       ' ' * self.offset * d + s for d, s in pvalue)
 
-  def pprint(self, v: interfaces.FieldValue) -> None:
-    """Pretty-print a field value."""
+  def pprint(self, v: Any) -> None:
+    """Pretty-print an enact value."""
     print(self.pformat(v))
 
 
-def pprint(resource: interfaces.FieldValue,
+def pprint(value: Any,
            max_ref_depth: Optional[int]=None,
            skip_repeated_refs: bool=False) -> None:
   """Pretty-prints a resource, optionally resolving references."""
   PPrinter(max_ref_depth=max_ref_depth,
-           skip_repeated_refs=skip_repeated_refs).pprint(resource)
+           skip_repeated_refs=skip_repeated_refs).pprint(value)
 
 
-def pformat(resource: interfaces.FieldValue,
+def pformat(value: Any,
             max_ref_depth: Optional[int]=None,
             skip_repeated_refs: bool=False) -> str:
   """Pretty-prints a resource, optionally resolving references."""
   return PPrinter(
     max_ref_depth=max_ref_depth,
-    skip_repeated_refs=skip_repeated_refs).pformat(resource)
+    skip_repeated_refs=skip_repeated_refs).pformat(value)

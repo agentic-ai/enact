@@ -58,12 +58,12 @@ def _check_resource_type(t: Optional[Type[enact.ResourceBase]], in_out: str):
     raise ValueError(
       f'{in_out} type is overly general: {t}. FastAPI requires specific '
       f'types to be set for the request.')
-  if issubclass(t, enact.NoneResource):
+  if issubclass(t, type(None)):
     return
   if not issubclass(t, enact.Resource):
     raise ValueError(
       f'{in_out} is not a subclass of enact.Resource: {t}. Only '
-      f'dataclass based resource are supported by FastAPI.')
+      f'dataclass-based resource inputs and outputs are supported by FastAPI.')
   dataclass_fields = set(f.name for f in dataclasses.fields(t))
   resource_fields = set(t.field_names())
   # Make sure that dataclass fields coincide with resource fields.
@@ -77,7 +77,7 @@ def _check_invokable(invokable: enact.Invokable, methods: List[str]):
   """Check input and output type."""
   _check_resource_type(invokable.get_input_type(), 'Input')
   _check_resource_type(invokable.get_output_type(), 'Output')
-  if 'GET' in methods and invokable.get_input_type() != enact.NoneResource:
+  if 'GET' in methods and invokable.get_input_type() != type(None):
     raise ValueError(
       'GET is only supported for invokables with input type NoneResource.')
 
@@ -111,7 +111,7 @@ def _add_fast_api(
     parameters=[param], return_annotation=invokable.get_output_type())
 
   wrapper_fn = (journaled_call if
-                invokable.get_input_type() == enact.NoneResource
+                invokable.get_input_type() == type(None)
                 else journaled_call_input)
 
   app.router.add_api_route(

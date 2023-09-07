@@ -17,7 +17,6 @@
 from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
-from enact.interfaces import NoneResource
 from enact.interfaces import ResourceBase
 from enact.interfaces import ResourceWrapperBase
 from enact.interfaces import ResourceDict
@@ -70,13 +69,8 @@ from enact.resource_registry import ResourceNotFound
 from enact.resource_registry import wrap
 from enact.resource_registry import unwrap
 
-from enact.resource_types import Image
-from enact.resource_types import Int
-from enact.resource_types import Float
-from enact.resource_types import Str
-from enact.resource_types import Bytes
-from enact.resource_types import List
-from enact.resource_types import NPArray
+# Trigger registration of standard resource wrappers.
+import enact.resource_wrappers
 
 from enact.serialization import Serializer
 from enact.serialization import JsonSerializer

@@ -43,14 +43,14 @@ import enact
 import dataclasses
 import random
 
-@enact.typed_invokable(input_type=enact.NoneResource, output_type=enact.Int)
+@enact.typed_invokable(input_type=type(None), output_type=int)
 @dataclasses.dataclass
 class RollDie(enact.Invokable):
   """An enact invokable that rolls a die."""
   sides: int
 
-  def call(self):
-    return enact.Int(random.randint(1, self.sides))
+  def call(self) -> int:
+    return random.randint(1, self.sides)
 
 roll_die = RollDie(sides=6)
 print(roll_die())  # Print score
@@ -72,19 +72,19 @@ with enact.FileStore('./enact_store') as store:
 Executions can be journaled with the `invoke` command.
 
 ```python
-@enact.typed_invokable(enact.Int, enact.Int)
+@enact.typed_invokable(int, int)
 @dataclasses.dataclass
 class RollDice(enact.Invokable):
   """Roll the indicated number of dice."""
   die: enact.Invokable
 
-  def call(self, num_rolls: enact.Int):
-    return enact.Int(sum(self.die() for _ in range(num_rolls)))
+  def call(self, num_rolls: int) -> int:
+    return sum(self.die() for _ in range(num_rolls))
 
 roll_dice = RollDice(roll_die)
 
 with store:
-  num_rolls = enact.commit(enact.Int(3))  # commit input to store.
+  num_rolls = enact.commit(3)  # commit input to store.
   invocation = roll_dice.invoke(num_rolls)  # create journaled execution.
   print(invocation.get_output())  # Print sum of 3 rolls
 ```

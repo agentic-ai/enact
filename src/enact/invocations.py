@@ -29,8 +29,9 @@ from enact import resources
 from enact import resource_registry
 
 
-C = TypeVar('C', bound=interfaces.ResourceBase)
-E = TypeVar('E', bound='ExceptionResource')
+AnyT = TypeVar('AnyT')
+ResourceT = TypeVar('ResourceT', bound=interfaces.ResourceBase)
+ExceptionT = TypeVar('ExceptionT', bound='ExceptionResource')
 
 
 @resource_registry.register
@@ -47,15 +48,15 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 
   def field_values(self) -> Iterable[interfaces.FieldValue]:
     """Return a list of field values, aligned with field_names."""
-    yield list(self.args)
+    yield resource_registry.to_field_value(self.args)
 
   @classmethod
-  def from_fields(cls: Type[C],
-                  field_dict: Mapping[str, interfaces.FieldValue]) -> C:
+  def from_fields(cls: Type[ResourceT],
+                  field_dict: Mapping[str, interfaces.FieldValue]) -> ResourceT:
     """Constructs the resource from a value dictionary."""
-    return cls(*field_dict['args'])
+    return cls(*resource_registry.from_field_value(field_dict['args']))
 
-  def set_from(self: C, other: Any):
+  def set_from(self: ResourceT, other: Any):
     """Sets the fields of this resource from another resource."""
     super().set_from(other)  # Raise error
 
@@ -64,9 +65,10 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 class WrappedException(ExceptionResource):
   """A python exception wrapped as a resource."""
 
-
+# Input value type.
 I_contra = TypeVar(
-  'I_contra', contravariant=True, bound=interfaces.ResourceBase)
+  'I_contra', contravariant=True)
+# Output value type.
 O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
 
 
@@ -77,15 +79,23 @@ class InputRequest(ExceptionResource):
   def __init__(
       self,
       invokable: references.Ref['_InvokableBase'],
-      input_resource: references.Ref,
-      requested_output: Type[interfaces.ResourceBase],
-      context: interfaces.FieldValue):
+      for_value: references.Ref,
+      requested_output: Type,
+      context: Any):
+    """Initialize a new input request.
+
+    Args:
+      invokable: The parent invokable that issued the request.
+      for_input: A reference to the value input is requested for.
+      requested_output: The type of output that is requested.
+      context: Any additional context required to resolve the input request.
+    """
     if not references.Store.get_current():
       raise contexts.NoActiveContext(
         'InputRequest must be created within a Store context.')
     super().__init__(
       invokable,
-      input_resource,
+      for_value,
       requested_output,
       context)
 
@@ -95,23 +105,23 @@ class InputRequest(ExceptionResource):
     return self.args[0]
 
   @property
-  def for_resource(self) -> references.Ref:
+  def for_value(self) -> references.Ref:
     """Returns a reference to the resource for which input is requested."""
     return self.args[1]
 
   @property
-  def requested_type(self) -> Type[interfaces.ResourceBase]:
+  def requested_type(self) -> Type:
     """Returns the type of input requested."""
     return self.args[2]
 
   @property
-  def context(self) -> interfaces.FieldValue:
+  def context(self) -> Any:
     return self.args[3]
 
   def continue_invocation(
       self,
       invocation: 'Invocation[I_contra, O_co]',
-      value: interfaces.ResourceBase,
+      value: Any,
       strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replays the invocation with the given value."""
@@ -126,7 +136,7 @@ class InputRequest(ExceptionResource):
   async def continue_invocation_async(
       self,
       invocation: 'Invocation[I_contra, O_co]',
-      value: interfaces.ResourceBase,
+      value: Any,
       strict: bool=True):
     ref = references.commit(self)
     def _exception_override(exception_ref: references.Ref[ExceptionResource]):
@@ -163,9 +173,9 @@ class RequestedTypeUndetermined(InvocationError):
 
 
 def _request_input(
-    for_resource: Optional[interfaces.ResourceBase],
-    requested_type: Optional[Type[interfaces.ResourceBase]],
-    context: interfaces.FieldValue=None):
+    for_input: Any,
+    requested_type: Optional[Type],
+    context: Any=None):
   """Requests an input from a user or external system.
 
   Args:
@@ -187,7 +197,7 @@ def _request_input(
       'Requested type must be specified when output type is undetermined.')
   raise InputRequest(
     references.commit(builder.invokable),
-    references.commit(for_resource),
+    references.commit(for_input),
     requested_type,
     context)
 
@@ -219,8 +229,8 @@ class Response(Generic[I_contra, O_co], resources.Resource):
 
 
 # A function that may override some exceptions that occur during invocation.
-ExceptionOverride = Callable[[references.Ref[ExceptionResource]],
-                             Optional[interfaces.ResourceBase]]
+ExceptionOverride = Callable[[references.Ref[ExceptionResource]], Any]
+
 
 
 @resource_registry.register
@@ -272,7 +282,7 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
 
   def rewind(self, num_calls=1) -> 'Invocation[I_contra, O_co]':
     """Rewinds the invocation by the specified number of calls."""
-    invocation = self.deep_copy_resource()
+    invocation = self.deepcopy_resource()
     with invocation.response.modify() as response:
       response.output = None
       for _ in range(num_calls):
@@ -352,14 +362,15 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
   @classmethod
   def call_or_replay(
-      cls, invokable: 'InvokableBase[I_contra, O_co]', arg: I_contra):
+      cls,
+      invokable: 'InvokableBase[I_contra, O_co]',
+      arg: I_contra) -> O_co:
     """If there is a replay active, try to use it."""
     context: Optional[ReplayContext[I_contra, O_co]] = (
       ReplayContext.get_current())
     call = invokable.call
 
-    if (isinstance(arg, interfaces.NoneResource) and
-        len(inspect.signature(invokable.call).parameters) == 0):
+    if arg is None and len(inspect.signature(invokable.call).parameters) == 0:
       # Allow invokables that take no call args if they accept NoneResources.
       # pylint: disable=unnecessary-lambda-assignment
       call = lambda _: invokable.call()  # type: ignore
@@ -376,12 +387,14 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
   @classmethod
   async def async_call_or_replay(
-      cls, invokable: 'AsyncInvokableBase[I_contra, O_co]', arg: I_contra):
+      cls,
+      invokable: 'AsyncInvokableBase[I_contra, O_co]',
+      arg: I_contra) -> O_co:
     """If there is a replay active, try to use it."""
     context: Optional[ReplayContext[I_contra, O_co]] = (
       ReplayContext.get_current())
     call = invokable.call
-    if (isinstance(arg, interfaces.NoneResource) and
+    if (arg is None and
         len(inspect.signature(invokable.call).parameters) == 0):
       # Allow invokables that take no call args if they accept NoneResources.
       # pylint: disable=unnecessary-lambda-assignment
@@ -543,25 +556,18 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
 
   def _check_call_valid(
       self,
-      input_resource: interfaces.ResourceBase):
+      input_value: Any):
     """Checks that the call did not do invalid things."""
-    if references.commit(input_resource) != self.input_ref:
+    if references.commit(input_value) != self.input_ref:
       raise InputChanged(
         f'Input changed during invocation of {self.invokable} on input '
-        f'{input_resource}. Only the invokable may change.')
+        f'{input_value}. Only the invokable may change.')
 
   def _process_output(
       self,
-      output_resource: Optional[interfaces.ResourceBase],
-      ) -> references.Ref[O_co]:
+      output: Any) -> references.Ref[O_co]:
     """Process the output and check for errors."""
-    if output_resource is None:
-      output_resource = interfaces.NoneResource()
-    if not isinstance(output_resource, interfaces.ResourceBase):
-      raise InvokableTypeError(
-        f'Invokable {self.invokable} returned {output_resource} '
-        f'which is not a resource.')
-    return cast(references.Ref[O_co], references.commit(output_resource))
+    return cast(references.Ref[O_co], references.commit(output))
 
   def _wrap_exception(self, exception: Exception) -> ExceptionResource:
     """Wraps an exception if necessary."""
@@ -595,19 +601,19 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       exception: Optional[Exception] = None
       output_ref: Optional[references.Ref[O_co]] = None
       try:
-        input_resource = self.input_ref()
+        input_value = self.input_ref()
         invokable = self.invokable
         assert isinstance(invokable, InvokableBase)
-        output_resource = ReplayContext.call_or_replay(
-          invokable, input_resource)
-        self._check_call_valid(input_resource)
-        output_ref = self._process_output(output_resource)
+        output_value = ReplayContext.call_or_replay(
+          invokable, input_value)
+        self._check_call_valid(input_value)
+        output_ref = self._process_output(output_value)
       except Exception as e:
         exception = e
         raise
       finally:
         self._create_invocation(output_ref, exception)
-      return cast(O_co, output_resource)
+      return cast(O_co, output_value)
 
   async def async_call(self) -> O_co:
     """Call the async invokable and set self.invocation."""
@@ -615,47 +621,19 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       exception: Optional[Exception] = None
       output_ref: Optional[references.Ref[O_co]] = None
       try:
-        input_resource = self.input_ref()
+        input_value = self.input_ref()
         invokable = self.invokable
         assert isinstance(invokable, AsyncInvokableBase)
-        output_resource = await ReplayContext.async_call_or_replay(
-          invokable, input_resource)
-        self._check_call_valid(input_resource)
-        output_ref = self._process_output(output_resource)
+        output_value = await ReplayContext.async_call_or_replay(
+          invokable, input_value)
+        self._check_call_valid(input_value)
+        output_ref = self._process_output(output_value)
       except Exception as e:
         exception = e
         raise
       finally:
         self._create_invocation(output_ref, exception)
-      return cast(O_co, output_resource)
-
-
-def resolve_resource(
-    resource_type: Optional[Type[C]],
-    *args, **kwargs):
-  """Resolves resource from arguments."""
-  input_type = resource_type
-  if (len(args) != 1 or kwargs or
-      not all(isinstance(arg, interfaces.ResourceBase)
-              for arg in args) or
-      not all(isinstance(arg, interfaces.ResourceBase)
-              for arg in kwargs.values())):
-    if input_type:
-      # Attempts to create a resource of the input type.
-      arg = input_type(*args, **kwargs)
-    else:
-      raise InvokableTypeError(
-        f'Untyped invokables must be called with a single resource argument, '
-        f'got args={args} and kwargs={kwargs}.')
-  else:
-    arg = args[0]
-
-  if input_type and not isinstance(arg, input_type):
-    raise InvokableTypeError(
-      f'Input type {type(arg).__qualname__} does not match '
-      f'{input_type.__qualname__}.')
-  return arg
-
+      return cast(O_co, output_value)
 
 class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   """Base class for sync / async invokable resources."""
@@ -666,6 +644,24 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   def get_input_type(cls) -> Optional[Type[I_contra]]:
     """Returns the type of the input if known."""
     return cls._input_type
+
+  @classmethod
+  def _check_input_type(cls, value: Any):
+    """Check the input type."""
+    input_type: Optional[Type] = cls._input_type
+    # pylint: disable=isinstance-second-argument-not-valid-type
+    if input_type and not isinstance(value, input_type):
+      raise InvokableTypeError(
+        f'Input must be of type {cls._input_type}, but got {type(value)}.')
+
+  @classmethod
+  def _check_output_type(cls, value: Any):
+    """Check the output type."""
+    output_type: Optional[Type] = cls._output_type
+    # pylint: disable=isinstance-second-argument-not-valid-type
+    if output_type is not None and not isinstance(value, output_type):
+      raise InvokableTypeError(
+        f'Output must be of type {cls._output_type}, but got {type(value)}.')
 
   @classmethod
   def get_output_type(cls) -> Optional[Type[O_co]]:
@@ -679,7 +675,7 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """Processes an invocation argument."""
     if arg is None:
       arg = cast(references.Ref[I_contra],
-                 references.commit(interfaces.NoneResource()))
+                 references.commit(None))
     if not isinstance(arg, references.Ref):
       raise InvokableTypeError('Input must be a reference.')
     return arg
@@ -704,21 +700,22 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
 class InvokableBase(_InvokableBase[I_contra, O_co]):
   """Base class for invokable resources."""
 
-  def call(self, resource: I_contra) -> O_co:
+  def call(self, value: I_contra) -> O_co:
     """Executes the invokable."""
     raise NotImplementedError()
 
-  def __call__(self, *args, **kwargs) -> O_co:
+  def __call__(self, arg=None) -> O_co:
     """Executes the invokable, tracking invocation metadata."""
-    arg = resolve_resource(self.get_input_type(), *args, **kwargs)
     parent: Optional[Builder] = Builder.get_current()
 
-    # Execution not tracked, so just call the invokable.
+    self._check_input_type(arg)
+    # Execution not tracked, so just call or replay the invokable.
     if not parent:
-      return ReplayContext.call_or_replay(self, arg)
-
-    builder = Builder(self, references.commit(arg))
-    output = builder.call()
+      output = ReplayContext.call_or_replay(self, arg)
+    else:
+      builder = Builder(self, references.commit(arg))
+      output = builder.call()
+    self._check_output_type(output)
     return output
 
   def invoke(
@@ -764,22 +761,24 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
 class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
   """Base class for invokable resources."""
 
-  async def call(self, resource: I_contra) -> O_co:
+  async def call(self, value: I_contra) -> O_co:
     """Executes the async invokable."""
     raise NotImplementedError()
 
-  async def __call__(self, *args, **kwargs) -> O_co:
+  async def __call__(self, arg=None) -> O_co:
     """Executes the async invokable, tracking invocation metadata."""
-    arg = resolve_resource(self.get_input_type(), *args, **kwargs)
     parent: Optional[Builder] = Builder.get_current()
 
-    # Execution not tracked, so just call the invokable.
-    if not parent:
-      result = await ReplayContext.async_call_or_replay(self, arg)
-      return result
+    self._check_input_type(arg)
 
-    builder = Builder(self, references.commit(arg))
-    output = await builder.async_call()
+    # Execution not tracked, so just call or replay the invokable.
+    if not parent:
+      output = await ReplayContext.async_call_or_replay(self, arg)
+    else:
+      builder = Builder(self, references.commit(arg))
+      output = await builder.async_call()
+
+    self._check_output_type(output)
     return output
 
   async def invoke(
@@ -836,8 +835,8 @@ I = TypeVar('I', bound=_InvokableBase)
 
 
 def typed_invokable(
-    input_type: Type[I_contra],
-    output_type: Type[O_co],
+    input_type: Optional[Type],
+    output_type: Optional[Type],
     register=True) -> Callable[
       [Type[I]], Type[I]]:
   """A decorator for creating typed invokables."""
@@ -858,22 +857,23 @@ def typed_invokable(
 @dataclasses.dataclass
 class RequestInput(Invokable):
   """An invokable that raises an InputRequest."""
-  requested_type: Type[interfaces.ResourceBase]
-  context: Optional[interfaces.FieldValue] = None
+  requested_type: Type
+  context: Any = None
 
-  def call(self, resource: interfaces.ResourceBase) -> interfaces.ResourceBase:
-    _request_input(resource, self.requested_type, self.context)
+  def call(self, input_to_user: Any) -> Any:
+    _request_input(input_to_user, self.requested_type, self.context)
     assert False
 
+
 def request_input(
-    requested_type: Type[C],
-    for_resource: Optional[interfaces.ResourceBase]=None,
-    context: Optional[interfaces.FieldValue]=None) -> C:
+    requested_type: Type[AnyT],
+    for_value: Any=None,
+    context: Optional[interfaces.FieldValue]=None) -> AnyT:
   """Request an input from an external system / user.
 
   Args:
     requested_type: The type of input to request.
-    for_resource: The resource to request input for. If unset, defaults to None.
+    for_value: The value to request input for. Defaults to None.
     context: An optional context to provide to the input request, e.g.,
       instructions to a user.
   Returns:
@@ -883,9 +883,7 @@ def request_input(
   Raises:
     InputRequest: Raised to halt execution in order to await input.
   """
-  if for_resource is None:
-    for_resource = interfaces.NoneResource()
-  return RequestInput(requested_type, context)(for_resource)
+  return RequestInput(requested_type, context)(for_value)
 
 
 class InvocationGenerator(Generic[I_contra, O_co]):
@@ -912,7 +910,7 @@ class InvocationGenerator(Generic[I_contra, O_co]):
     self._from_invocation = from_invocation
     self._invokable = invokable
     self._input = input_ref
-    self._request_input: Optional[interfaces.ResourceBase] = None
+    self._request_input: Any = None
 
   @property
   def complete(self) -> bool:
@@ -942,7 +940,7 @@ class InvocationGenerator(Generic[I_contra, O_co]):
     assert isinstance(input_request, InputRequest)
     return input_request
 
-  def set_input(self, resource: interfaces.ResourceBase):
+  def set_input(self, value: Any):
     """Set input for the next call to __next__.
 
     This allows using the generator in iterator-style, e.g.,
@@ -962,7 +960,7 @@ class InvocationGenerator(Generic[I_contra, O_co]):
     Args:
       resource: The resource to set as input.
     """
-    self._request_input = resource.deep_copy_resource()
+    self._request_input = resource_registry.deepcopy(value)
 
   def __iter__(self) -> 'InvocationGenerator[I_contra, O_co]':
     """Returns the generator."""
@@ -979,25 +977,23 @@ class InvocationGenerator(Generic[I_contra, O_co]):
       else:
         assert self._invokable
         if not self._input:
-          if interfaces.NoneResource != self._invokable.get_input_type():
+          if self._invokable.get_input_type() != type(None):
             raise InvocationError(
-              'Invokable does not have input type NoneResource. '
+              'Invokable has non-None input type. '
               'Please provide an explicit input reference on generator '
               'construction')
           self._input = cast(references.Ref[I_contra],
-                             references.commit(interfaces.NoneResource()))
+                             references.commit(None))
         self._invocation = self._invokable.invoke(self._input)
       if self.complete:
         raise StopIteration()
       return self.input_request
     else:
       if self._request_input is None:
-        if not issubclass(interfaces.NoneResource,
-                          self.input_request.requested_type):
+        if not self.input_request.requested_type is type(None):
           raise InvocationError(
             'Invocation requests non-None input. Please use \'send(...)\' '
             'instead or set the input using \'set_input(...)\'.')
-        self._request_input = interfaces.NoneResource()
       self._invocation = self.input_request.continue_invocation(
         self._invocation, self._request_input)
       self._request_input = None

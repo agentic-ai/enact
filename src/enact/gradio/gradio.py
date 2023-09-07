@@ -22,21 +22,20 @@ import gradio as gr  # type: ignore
 from gradio import events as gradio_events
 import PIL.Image
 
-from enact import contexts
+from enact import contexts, resource_registry
 from enact import interfaces
 from enact import invocations
 from enact import references
 from enact import pretty_print
-from enact import resource_types
 from enact import serialization
 
 
-W = TypeVar('W', bound='ResourceWidget')
+W = TypeVar('W', bound='EnactWidget')
 C = TypeVar('C', bound=gr.components.Component)
 
 
-class ResourceWidget(abc.ABC):
-  """A UI widget that represents a resource."""
+class EnactWidget(abc.ABC):
+  """A UI widget that represents an enact value."""
 
   def __init__(self):
     """Initializes the component."""
@@ -44,16 +43,16 @@ class ResourceWidget(abc.ABC):
 
   @classmethod
   @abc.abstractmethod
-  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
-    """Returns whether the widget supports the resource type."""
+  def supports_type(cls, value_type: Type) -> bool:
+    """Returns whether the widget supports the value type."""
 
   @classmethod
   def create(cls: Type[W],
-             resource_type: Type[interfaces.ResourceBase],
+             value_type: Type,
              **kwargs) -> W:
-    """Create a widget for a resource type or raises an error if not supported."""
-    if not cls.supports_type(resource_type):
-      raise TypeError(f'{cls} does not support {resource_type}')
+    """Create widget for a value type or raises an error if not supported."""
+    if not cls.supports_type(value_type):
+      raise TypeError(f'{cls} does not support {value_type}')
     return cls(**kwargs)
 
   def add(self, c: C) -> C:
@@ -63,15 +62,16 @@ class ResourceWidget(abc.ABC):
 
   @abc.abstractmethod
   def set(self,
-          resource: Optional[interfaces.ResourceBase]=None,
+          value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements to resource."""
 
   @abc.abstractmethod
-  def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
+  def get(self, *component_values) -> Optional[Any]:
     """Returns the current contents as a resource."""
 
-  def consume(self, component_values: List) -> Optional[interfaces.ResourceBase]:
+  def consume(self, component_values: List) -> (
+      Optional[interfaces.ResourceBase]):
     """Returns the contents as a resource and removes args from input list."""
     return self.get(*self.consume_args(component_values))
 
@@ -84,13 +84,13 @@ class ResourceWidget(abc.ABC):
   def set_from_event(
       self,
       event: gradio_events.EventListenerMethod,
-      fun: Callable[..., Optional[interfaces.ResourceBase]],
+      fun: Callable[..., Optional[Any]],
       inputs: List[gr.components.Component],
       **kwargs) -> gradio_events.Dependency:
     """Set from an event."""
     def _set(*args):
-      resource = fun(*args)
-      updates = self.set(resource, **kwargs)
+      value = fun(*args)
+      updates = self.set(value, **kwargs)
       if len(updates) == 1:
         # Gradio needs unpacking for singleton lists.
         return updates[0]
@@ -103,7 +103,7 @@ class ResourceWidget(abc.ABC):
 
 RW = TypeVar('RW', bound='RefWidget')
 
-class RefWidget(ResourceWidget):
+class RefWidget(EnactWidget):
   """A UI widget that represents a reference."""
 
   def __init__(self, **kwargs):
@@ -134,21 +134,21 @@ class RefWidget(ResourceWidget):
                 outputs=[self.ref_details])
 
   @classmethod
-  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
+  def supports_type(cls, resource_type: Type) -> bool:
     """Returns whether the widget supports the resource type."""
     return issubclass(resource_type, references.Ref)
 
   def set(self,
-          resource: Optional[interfaces.ResourceBase]=None,
+          value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements."""
-    if not resource:
+    if not value:
       return [
         self.digest_box.update(value='', **kwargs),
         self.ref_details.update(**kwargs)]
-    assert isinstance(resource, references.Ref)
+    assert isinstance(value, references.Ref)
     return [
-      self.digest_box.update(value=resource.id, **kwargs),
+      self.digest_box.update(value=value.id, **kwargs),
       self.ref_details.update(**kwargs)]
 
   def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
@@ -159,7 +159,7 @@ class RefWidget(ResourceWidget):
     return references.Ref.from_id(ref_box_value)
 
 
-class ImageWidget(ResourceWidget):
+class ImageWidget(EnactWidget):
   """Supports image-type resources."""
 
   def __init__(self, **kwargs):
@@ -167,29 +167,28 @@ class ImageWidget(ResourceWidget):
     self._image = self.add(gr.Image(**kwargs))
 
   @classmethod
-  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
+  def supports_type(cls, value_type: Type) -> bool:
     """Supports all resources."""
-    return issubclass(resource_type, resource_types.Image)
+    return issubclass(value_type, PIL.Image.Image)
 
   def set(self,
-          resource: Optional[interfaces.ResourceBase]=None,
+          value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements to resource."""
-    assert isinstance(resource, resource_types.Image)
-    if resource:
-      return [self._image.update(value=resource.value, **kwargs)]
+    assert isinstance(value, PIL.Image.Image)
+    if value:
+      return [self._image.update(value=value, **kwargs)]
     else:
       return [self._image.update(value=None, **kwargs)]
 
-  def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
+  def get(self, *component_values) -> Optional[Any]:
     """Returns the current contents as a resource."""
     if component_values[0] is None:
       return None
-    return resource_types.Image(
-      PIL.Image.fromarray(component_values[0]))
+    return PIL.Image.fromarray(component_values[0])
 
 
-class StrWidget(ResourceWidget):
+class StrWidget(EnactWidget):
   """Supports string-type resources."""
 
   def __init__(self, **kwargs):
@@ -197,27 +196,27 @@ class StrWidget(ResourceWidget):
     self._box = self.add(gr.TextArea(**kwargs, show_label=False))
 
   @classmethod
-  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
+  def supports_type(cls, value_type: Type) -> bool:
     """Supports all resources."""
-    return issubclass(resource_type, resource_types.Str)
+    return issubclass(value_type, str)
 
   def set(self,
-          resource: Optional[interfaces.ResourceBase]=None,
+          value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements to resource."""
-    if resource is None:
+    if value is None:
       return [self._box.update(value='', **kwargs)]
-    assert isinstance(resource, resource_types.Str)
-    return [self._box.update(value=str(resource), **kwargs)]
+    assert isinstance(value, str)
+    return [self._box.update(value=str(value), **kwargs)]
 
-  def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
+  def get(self, *component_values) -> Optional[Any]:
     """Returns the current contents as a resource."""
     if component_values[0] is None:
       return None
-    return resource_types.Str(component_values[0])
+    return str(component_values[0])
 
 
-class JsonFieldWidget(ResourceWidget):
+class JsonFieldWidget(EnactWidget):
   """Default widget to read / display a resource using JSON field input."""
 
   def __init__(self, resource_type: Type[interfaces.ResourceBase], **kwargs):
@@ -232,25 +231,25 @@ class JsonFieldWidget(ResourceWidget):
           label=field_name, **kwargs))
 
   @classmethod
-  def supports_type(cls, resource_type: Type[interfaces.ResourceBase]) -> bool:
+  def supports_type(cls, value_type: Type) -> bool:
     """Supports all resources."""
     return True
 
   @classmethod
   def create(
       cls,
-      resource_type: Type[interfaces.ResourceBase],
+      value_type: Type,
       **kwargs) -> 'JsonFieldWidget':
     """Creates a new instance of the widget."""
-    return cls(resource_type, **kwargs)
+    return cls(value_type, **kwargs)
 
   def set(self,
-          resource: Optional[interfaces.ResourceBase]=None,
+          value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements."""
     updates: List[Dict[str, Any]] = []
-    if resource:
-      resource_dict = resource.to_resource_dict()
+    if value:
+      resource_dict = resource_registry.wrap(value).to_resource_dict()
     else:
       resource_dict = None
 
@@ -266,13 +265,15 @@ class JsonFieldWidget(ResourceWidget):
       updates.append(self._boxes[field_name].update(**update_dict))
     return updates
 
-  def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
+  def get(self, *component_values) -> Optional[Any]:
     """Returns the current contents as a resource."""
     resource_dict = interfaces.ResourceDict(self._type)
     for field_name, value in zip(self._type.field_names(), component_values):
       json_val = json.loads(value)
       resource_dict[field_name] = self._serializer.from_json(json_val)
-    return self._type.from_resource_dict(resource_dict)
+    resource_type = resource_registry.wrap_type(self._type)
+    resource = resource_type.from_resource_dict(resource_dict)
+    return resource_registry.unwrap(resource)
 
 
 class GUI:
@@ -281,8 +282,10 @@ class GUI:
   def __init__(
       self,
       invokable: references.Ref[invocations.InvokableBase],
-      input_required_inputs: Optional[List[Type[interfaces.ResourceBase]]]=None,
-      input_required_outputs: Optional[List[Type[interfaces.ResourceBase]]]=None):
+      input_required_inputs:
+        Optional[List[Type[Any]]]=None,
+      input_required_outputs:
+        Optional[List[Type[Any]]]=None):
     """Create a new UI for the component.
 
     Args:
@@ -294,10 +297,10 @@ class GUI:
     """
     self._invokable = invokable
     self._input_required_inputs = input_required_inputs or [
-      resource_types.Str
+      str
     ]
     self._input_required_outputs = input_required_outputs or [
-      resource_types.Str
+      str
     ]
 
     input_type = self._invokable().get_input_type()
@@ -311,28 +314,28 @@ class GUI:
     self._output_type: Type[interfaces.ResourceBase] = output_type
 
     self._blocks: Optional[gr.Blocks] = None
-    self._input_widget: Optional[ResourceWidget] = None
-    self._output_widget: Optional[ResourceWidget] = None
+    self._input_widget: Optional[EnactWidget] = None
+    self._output_widget: Optional[EnactWidget] = None
     self._invocation_widget: Optional[RefWidget] = None
     self._input_required_input_widgets: Dict[
-      Type[interfaces.ResourceBase], ResourceWidget] = {}
+      Type[interfaces.ResourceBase], EnactWidget] = {}
     self._input_required_output_widgets: Dict[
-      Type[interfaces.ResourceBase], ResourceWidget] = {}
+      Type[interfaces.ResourceBase], EnactWidget] = {}
 
-    self._widget_types: List[Type[ResourceWidget]] = []
+    self._widget_types: List[Type[EnactWidget]] = []
     self.register(JsonFieldWidget)
     self.register(RefWidget)
     self.register(StrWidget)
     self.register(ImageWidget)
 
   @property
-  def input_widget(self) -> ResourceWidget:
+  def input_widget(self) -> EnactWidget:
     """Input widget of GUI."""
     assert self._input_widget, 'Blocks not generated yet.'
     return self._input_widget
 
   @property
-  def output_widget(self) -> ResourceWidget:
+  def output_widget(self) -> EnactWidget:
     """Output widget of GUI."""
     assert self._output_widget, 'Blocks not generated yet.'
     return self._output_widget
@@ -343,7 +346,7 @@ class GUI:
     assert self._invocation_widget, 'Blocks not generated yet.'
     return self._invocation_widget
 
-  def register(self, resource_widget: Type[ResourceWidget]):
+  def register(self, resource_widget: Type[EnactWidget]):
     """Register a resource widget."""
     self._widget_types.append(resource_widget)
 
@@ -355,8 +358,9 @@ class GUI:
     return self._blocks
 
   def _create_widget_by_resource_type(
-      self, resource_type: Type[interfaces.ResourceBase], **kwargs) -> (
-        ResourceWidget):
+      self,
+      resource_type: Type[interfaces.ResourceBase],
+      **kwargs) -> EnactWidget:
     """Create a widget for a resource type."""
     for widget_type in self._widget_types[::-1]:
       if widget_type.supports_type(resource_type):
@@ -369,11 +373,13 @@ class GUI:
 
   def _get_output_widget(self, resource_type: Type[interfaces.ResourceBase]):
     """Returns the widget for the input resource type."""
-    return self._create_widget_by_resource_type(resource_type, interactive=False)
+    return self._create_widget_by_resource_type(
+      resource_type, interactive=False)
 
   def _invoke(self, *args) -> Optional[references.Ref[invocations.Invocation]]:
     """Invoke the object."""
-    input_resource = self.input_widget.get(*args[:len(self.input_widget.components)])
+    input_resource = self.input_widget.get(
+      *args[:len(self.input_widget.components)])
     if not input_resource:
       return None
     last_invocation = self.invocation_widget.get(*args[len(
@@ -385,7 +391,8 @@ class GUI:
     invocation = invokable().invoke(references.commit(input_resource))
     return references.commit(invocation)
 
-  def _continue(self, *args) -> Optional[references.Ref[invocations.Invocation]]:
+  def _continue(self, *args) -> Optional[
+      references.Ref[invocations.Invocation]]:
     """Invoke the object."""
     component_values = list(args)
     invocation_ref = self.invocation_widget.consume(component_values)
@@ -425,18 +432,19 @@ class GUI:
         self._input_widget = self._create_widget_by_resource_type(
           self._input_type)
 
-      # Row is a workaround https://github.com/gradio-app/gradio/issues/4505.
+      # Row workaround, see https://github.com/gradio-app/gradio/issues/4505.
       output_group = gr.Row(visible=False)
       with output_group, gr.Group():
         gr.Markdown(value='Output:')
         self._output_widget = self._create_widget_by_resource_type(
           self._output_type, interactive=False)
 
-      # Row is a workaround for https://github.com/gradio-app/gradio/issues/4505.
+      # Row workaround, see https://github.com/gradio-app/gradio/issues/4505.
       exception_group = gr.Row(visible=False)
       with exception_group, gr.Group():
         gr.Markdown(value='Exception:')
-        exception_area = gr.TextArea(value='', interactive=False, show_label=False)
+        exception_area = gr.TextArea(
+          value='', interactive=False, show_label=False)
 
       with gr.Group():
         input_required_header_md = gr.Markdown(visible=False)
@@ -447,7 +455,7 @@ class GUI:
               resource_type, interactive=False, visible=False))
         input_required_input_md = gr.Markdown(visible=False)
         for resource_type in self._input_required_inputs:
-          # Create widgets to sample input from the user for InputRequired exceptions.
+          # Create widgets to sample input from the user.
           self._input_required_input_widgets[resource_type] = (
             self._create_widget_by_resource_type(
               resource_type, interactive=True, visible=False))
@@ -483,7 +491,7 @@ class GUI:
         """Flatten a list of lists."""
         return [item for sublist in l for item in sublist]
 
-      def component_update(widget: ResourceWidget, **kwargs):
+      def component_update(widget: EnactWidget, **kwargs):
         """Return a list of updates for the widget components."""
         return [c.update(**kwargs) for c in widget.components]
 
@@ -544,7 +552,7 @@ class GUI:
           return updates
 
         # Try and display the exception causing input to the user.
-        output_to_user = cast(interfaces.ResourceBase, exception.for_resource())
+        output_to_user = cast(interfaces.ResourceBase, exception.for_value())
         requested_input_from_user_type = exception.requested_type
         updates = []
         found_output_to_user_widget = update_input_required_widgets(
@@ -563,13 +571,15 @@ class GUI:
             f'User input requested, but no widget found for '
             f'{exception.requested_type}')
         if exception.context:
-          md_value += f'\n\n*Context:*\n\n{pretty_print.pformat(exception.context)}'
+          md_value += (
+            f'\n\n*Context:*\n\n{pretty_print.pformat(exception.context)}')
         if not md_value:
           md_value = 'Provide input below.'
 
         updates_prefix = [
           exception_group.update(visible=not found_output_to_user_widget),
-          exception_area.update(value='' if found_output_to_user_widget else str(exception)),
+          exception_area.update(value='' if found_output_to_user_widget
+                                else str(exception)),
           output_group.update(visible=False),
           input_required_header_md.update(
             value='### User input interrupt',
@@ -590,7 +600,8 @@ class GUI:
       self.invocation_widget.set_from_event(
         run_button.click,
         contexts.with_current_contexts(self._invoke),
-        inputs=self._input_widget.components + self._invocation_widget.components)
+        inputs=self._input_widget.components +
+               self._invocation_widget.components)
 
       # Continue the invokation on click Continue.
       self.invocation_widget.set_from_event(
