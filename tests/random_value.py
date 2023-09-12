@@ -15,7 +15,7 @@
 
 import dataclasses
 import random
-from typing import Callable, List, Mapping, Sequence
+from typing import Callable, Dict, List
 
 import enact
 
@@ -27,11 +27,11 @@ def rand_resource() -> enact.ResourceBase:
   """Returns a random resource."""
   return R(rand_value(), rand_value())
 
-def rand_sequence() -> Sequence[enact.FieldValue]:
+def rand_list() -> List[enact.FieldValue]:
   """Return a random sequence."""
   return [rand_value() for _ in range(random.randint(0, 3))]
 
-def rand_map() -> Mapping[str, enact.FieldValue]:
+def rand_dict() -> Dict[str, enact.FieldValue]:
   """Return a random mapping."""
   return {rand_str(): rand_value() for _ in range(random.randint(0, 3))}
 
@@ -43,8 +43,8 @@ rand_generators: List[Callable[[], enact.FieldValue]] = [
   rand_str,
   lambda: rand_str().encode('utf-8'),
   rand_resource,
-  rand_sequence,
-  rand_map,
+  rand_list,
+  rand_dict,
   lambda: R,  # type-valued field.
 ]
 

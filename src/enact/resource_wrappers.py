@@ -22,10 +22,10 @@ import numpy as np
 import PIL.Image
 
 from enact import resources
-from enact import resource_registry
+from enact import registration
 
 
-@resource_registry.register_wrapper
+@registration.register
 @dataclasses.dataclass
 class TupleWrapper(resources.ResourceWrapper[tuple]):
   """Wrapper for tuples."""
@@ -47,7 +47,7 @@ class TupleWrapper(resources.ResourceWrapper[tuple]):
     return tuple(self.value)
 
 
-@resource_registry.register_wrapper
+@registration.register
 @dataclasses.dataclass
 class SetWrapper(resources.ResourceWrapper[set]):
   """Wrapper for tuples."""
@@ -69,7 +69,7 @@ class SetWrapper(resources.ResourceWrapper[set]):
     return set(self.value)
 
 
-@resource_registry.register_wrapper
+@registration.register
 @dataclasses.dataclass
 class NPArrayWrapper(resources.ResourceWrapper):
   """A resource wrapper for numpy arrays."""
@@ -93,7 +93,7 @@ class NPArrayWrapper(resources.ResourceWrapper):
     return np.load(bytes_io)
 
 
-@resource_registry.register_wrapper
+@registration.register
 @dataclasses.dataclass
 class PILImageWrapper(resources.ResourceWrapper):
   """An resource wrapper for PIL images."""

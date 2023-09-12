@@ -31,9 +31,9 @@ class PrettyPrinterTest(unittest.TestCase):
       (42, '42'),
       (3.14, '3.14'),
       (b'hello', '<5 bytes>'),
-      ("hello", '\'hello\''),
-      ([1, 2, 3], "[\n  1\n  2\n  3]"),
-      ({"a": 1, "b": 2}, '{\n  a: 1\n  b: 2}')]
+      ('hello', '\'hello\''),
+      ([1, 2, 3], '[\n  1\n  2\n  3]'),
+      ({'a': 1, 'b': 2}, '{\n  "a": 1\n  "b": 2}')]
     for field_value, expected in test_cases:
       with self.subTest(field_value=field_value):
         formatted = enact.pformat(field_value)

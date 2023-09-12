@@ -69,7 +69,7 @@ class WrappedException(ExceptionResource):
 I_contra = TypeVar(
   'I_contra', contravariant=True)
 # Output value type.
-O_co = TypeVar('O_co', covariant=True, bound=interfaces.ResourceBase)
+O_co = TypeVar('O_co', covariant=True)
 
 
 @resource_registry.register
@@ -78,7 +78,7 @@ class InputRequest(ExceptionResource):
 
   def __init__(
       self,
-      invokable: references.Ref['_InvokableBase'],
+      invokable: references.Ref[Callable],
       for_value: references.Ref,
       requested_output: Type,
       context: Any):
@@ -100,7 +100,7 @@ class InputRequest(ExceptionResource):
       context)
 
   @property
-  def invokable(self) -> references.Ref['_InvokableBase']:
+  def invokable(self) -> references.Ref[Callable]:
     """Returns the invokable that requested the input."""
     return self.args[0]
 
@@ -645,6 +645,10 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """Returns the type of the input if known."""
     return cls._input_type
 
+  def __call__(self, *args, **kwargs):
+    """Subclasses implement this directly or as async."""
+    raise NotImplementedError()
+
   @classmethod
   def _check_input_type(cls, value: Any):
     """Check the input type."""
@@ -723,7 +727,8 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       arg: Optional[references.Ref[I_contra]]=None,
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
-      raise_on_invocation_error:bool=True,
+      raise_on_errors: Tuple[Type[Exception], ...]=(
+        InvocationError, interfaces.FrameworkError),
       strict: bool=True,
       commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
@@ -733,7 +738,7 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       replay_from: An optional invocation to replay form.
       exception_override: If replaying, an optional override for replayed
         exceptions.
-      raise_on_invocation_error: Whether invocation errors should be reraised.
+      raise_on_errors: Which errors should raise beyond the invocation.
       strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
       commit: Whether to commit the new invocation object.
@@ -746,9 +751,8 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       builder = Builder(self, arg)
       try:
         builder.call()
-      except InvocationError:
-        if raise_on_invocation_error:
-          raise
+      except raise_on_errors:
+        raise
       except Exception:  # pylint: disable=broad-exception-caught
         if not builder.completed:
           raise
@@ -765,7 +769,7 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
     """Executes the async invokable."""
     raise NotImplementedError()
 
-  async def __call__(self, arg=None) -> O_co:
+  async def __call__(self, arg=None) -> O_co:  # pylint: disable=invalid-overridden-method
     """Executes the async invokable, tracking invocation metadata."""
     parent: Optional[Builder] = Builder.get_current()
 
@@ -786,7 +790,8 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       arg: Optional[references.Ref[I_contra]]=None,
       replay_from: Optional[Invocation[I_contra, O_co]]=None,
       exception_override: ExceptionOverride=lambda _: None,
-      raise_on_invocation_error:bool=True,
+      raise_on_errors: Tuple[Type[Exception], ...]=(
+        InvocationError, interfaces.FrameworkError),
       strict: bool=True,
       commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
@@ -796,7 +801,7 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       replay_from: An optional invocation to replay form.
       exception_override: If replaying, an optional override for replayed
         exceptions.
-      raise_on_invocation_error: Whether invocation errors should be reraised.
+      raise_on_errors: Which errors should raise beyond the invocation.
       strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
       commit: Whether to commit the new invocation object.
@@ -809,9 +814,8 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       builder = Builder(self, arg)
       try:
         await builder.async_call()
-      except InvocationError:
-        if raise_on_invocation_error:
-          raise
+      except raise_on_errors:
+        raise
       except Exception:  # pylint: disable=broad-exception-caught
         if not builder.completed:
           raise

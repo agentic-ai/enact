@@ -17,9 +17,8 @@
 import unittest
 
 from enact import digests, resource_registry
-from enact import interfaces
 
-from tests import random_value
+import random_value  # type: ignore
 
 
 class DigestTest(unittest.TestCase):

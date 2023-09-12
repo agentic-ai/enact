@@ -16,7 +16,7 @@
 
 import unittest
 import threading
-from typing import Any, Optional, Type
+from typing import Any, Optional
 
 from enact import contexts
 

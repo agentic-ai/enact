@@ -80,42 +80,51 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     return from_field_value(self.wrapped)
 
 
-class NoneWrapper(FieldValueWrapper[None]):
+
+class PrimitiveWrapper(FieldValueWrapper[WrappedT]):
+  """Wrapper for primitives."""
+
+  @classmethod
+  def is_immutable(cls) -> bool:
+    return True
+
+
+class NoneWrapper(PrimitiveWrapper[None]):
   """Wrapper for None."""
   @classmethod
   def wrapped_type(cls) -> Type[None]:
     return type(None)
 
 
-class IntWrapper(FieldValueWrapper[int]):
+class IntWrapper(PrimitiveWrapper[int]):
   """Wrapper for ints."""
   @classmethod
   def wrapped_type(cls) -> Type[int]:
     return int
 
 
-class FloatWrapper(FieldValueWrapper[float]):
+class FloatWrapper(PrimitiveWrapper[float]):
   """Wrapper for floats."""
   @classmethod
   def wrapped_type(cls) -> Type[float]:
     return float
 
 
-class BoolWrapper(FieldValueWrapper[bool]):
+class BoolWrapper(PrimitiveWrapper[bool]):
   """Wrapper for bools."""
   @classmethod
   def wrapped_type(cls) -> Type[bool]:
     return bool
 
 
-class StrWrapper(FieldValueWrapper[str]):
-  """Wrapper for bytes."""
+class StrWrapper(PrimitiveWrapper[str]):
+  """Wrapper for strs."""
   @classmethod
   def wrapped_type(cls) -> Type[str]:
     return str
 
 
-class BytesWrapper(FieldValueWrapper[bytes]):
+class BytesWrapper(PrimitiveWrapper[bytes]):
   """Wrapper for bytes."""
   @classmethod
   def wrapped_type(cls) -> Type[bytes]:
@@ -128,12 +137,23 @@ class ListWrapper(FieldValueWrapper[list]):
   def wrapped_type(cls) -> Type[list]:
     return list
 
+  @classmethod
+  def set_wrapped_value(cls, target: list, src: list):
+    target.clear()
+    target.extend(src)
+
 
 class DictWrapper(FieldValueWrapper[dict]):
   """Wrapper for dicts."""
   @classmethod
   def wrapped_type(cls) -> Type[dict]:
     return dict
+
+  @classmethod
+  def set_wrapped_value(cls, target: dict, src: dict):
+    target.clear()
+    target.update(src)
+
 
 class Registry:
   """Registers resource types for deserialization."""
@@ -146,14 +166,14 @@ class Registry:
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
     self._wrapped_types: Dict[Type, Type[interfaces.ResourceWrapperBase]] = {}
     self._wrapper_types: Set[Type[interfaces.ResourceWrapperBase]] = set()
-    self.register_wrapper(NoneWrapper)
-    self.register_wrapper(IntWrapper)
-    self.register_wrapper(FloatWrapper)
-    self.register_wrapper(BoolWrapper)
-    self.register_wrapper(StrWrapper)
-    self.register_wrapper(BytesWrapper)
-    self.register_wrapper(ListWrapper)
-    self.register_wrapper(DictWrapper)
+    self.register(NoneWrapper)
+    self.register(IntWrapper)
+    self.register(FloatWrapper)
+    self.register(BoolWrapper)
+    self.register(StrWrapper)
+    self.register(BytesWrapper)
+    self.register(ListWrapper)
+    self.register(DictWrapper)
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""
@@ -171,6 +191,8 @@ class Registry:
         f'registered to a different type: '
         f'{self._type_map[type_id]}\n')
     self._type_map[type_id] = resource
+    if issubclass(resource, interfaces.ResourceWrapperBase):
+      self._register_resource_wrapper(resource)
 
   def lookup(self, type_id: str) -> Type[interfaces.ResourceBase]:
     """Looks up a resource type by name."""
@@ -179,9 +201,8 @@ class Registry:
       raise ResourceNotFound(f'No type registered for {type_id}')
     return resource_class
 
-  def register_wrapper(self, wrapper_type: Type[WrapperT]):
+  def _register_resource_wrapper(self, wrapper_type: Type[WrapperT]):
     """Register a new wrapper type."""
-    self.register(wrapper_type)
     self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
     self._wrapper_types.add(wrapper_type)
 
@@ -254,7 +275,8 @@ def register(cls: Type[ResourceT]) -> Type[ResourceT]:
 
 def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
   """Decorator for resource wrapper classes."""
-  Registry.get().register_wrapper(cls)
+  # pylint: disable=protected-access
+  Registry.get()._register_resource_wrapper(cls)
   return cls
 
 

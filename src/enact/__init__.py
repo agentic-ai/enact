@@ -14,6 +14,8 @@
 
 """Top-level definitions."""
 
+from enact.function_wrappers import invoke
+
 from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
@@ -61,8 +63,8 @@ from enact.references import FileStore
 from enact.resources import Resource
 from enact.resources import ResourceWrapper
 
-from enact.resource_registry import register
-from enact.resource_registry import register_wrapper
+from enact.registration import register
+
 from enact.resource_registry import Registry
 from enact.resource_registry import RegistryError
 from enact.resource_registry import ResourceNotFound

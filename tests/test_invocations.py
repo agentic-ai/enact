@@ -19,7 +19,7 @@ import dataclasses
 import random
 import tempfile
 import time
-from typing import List, Optional, cast
+from typing import Optional, cast
 import unittest
 from unittest import mock
 
@@ -646,6 +646,9 @@ class AsyncInvocationsTest(unittest.TestCase):
     self.dir = tempfile.TemporaryDirectory()
     self.backend = enact.FileBackend(self.dir.name)
     self.store = enact.Store(self.backend)
+
+  def tearDown(self):
+    self.dir.cleanup()
 
   def test_call(self):
     """Tests calling an async invokable directly."""

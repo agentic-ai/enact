@@ -17,7 +17,8 @@
 import abc
 import functools
 import json
-from typing import Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union
+from typing import (
+  Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union)
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -51,11 +52,22 @@ ResourceDictValue = Union[
 C = TypeVar('C', bound='ResourceBase')
 
 
-class ResourceError(Exception):
+class FrameworkError(Exception):
+  """Superclass for framework related errors.
+
+  Framework errors are not caught by the framework during tracked execution, but
+  are instead propagated to the caller.
+  """
+
+class ResourceError(FrameworkError):
   """Superclass for resource related errors."""
 
 
-class FieldTypeError(Exception):
+class ImplementationMissing(FrameworkError):
+  """Superclass for errors where an implementaton is missing."""
+
+
+class FieldTypeError(FrameworkError):
   """Superclass for errors related to field types."""
 
 
@@ -180,7 +192,7 @@ class ResourceBase:
       other: The resource to set fields from.
     """
 
-    raise NotImplementedError(
+    raise ImplementationMissing(
       f'Setting fields from another resource is not '
       f'supported by type {type(self)}.')
 
@@ -202,7 +214,7 @@ WrapperT = TypeVar('WrapperT', bound='ResourceWrapperBase')
 
 
 class ResourceWrapperBase(ResourceBase, Generic[WrappedT]):
-  """Interface for resources that wrap python objects."""
+  """Interface for resource classes that wrap python classes."""
   @classmethod
   @abc.abstractmethod
   def wrapped_type(cls) -> Type[WrappedT]:
@@ -219,3 +231,15 @@ class ResourceWrapperBase(ResourceBase, Generic[WrappedT]):
   def unwrap(self) -> WrappedT:
     """Wrap a value."""
     raise NotImplementedError()
+
+  @classmethod
+  def is_immutable(cls) -> bool:
+    """Whether the wrapped value is immutable."""
+    return False
+
+  @classmethod
+  def set_wrapped_value(cls, target: WrappedT, src: WrappedT):
+    """Set a wrapped value target to correspond to source."""
+    raise ImplementationMissing(
+      f'Please implement set_wrapped_value for ResourceWrapper'
+      f'{cls} to enable advanced features, e.g., replays.')
