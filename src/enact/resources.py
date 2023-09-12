@@ -68,10 +68,29 @@ class Resource(interfaces.ResourceBase):
     Implementation of set_from is required to support replays of invokable
     resources that change their internal state during execution.
     """
-    if not type(self) is type(other):  # pylint: disable=unidiomatic-typecheck
+    if not type(self) == type(other):  # pylint: disable=unidiomatic-typecheck
       raise TypeError(f'Cannot set_from {type(other)} into {type(self)}.')
     copy = other.deepcopy_resource()
     for field in dataclasses.fields(self):
+      self_field = getattr(self, field.name)
+      target = getattr(other, field.name)
+      if self_field is target:
+        continue
+      if type(self_field) == type(target):  # pylint: disable=unidiomatic-typecheck
+        if isinstance(self_field, interfaces.ResourceBase):
+          # In cases where we have compatible field values, we can set them
+          # directly without creating a new instance. Note that this may lead to
+          # unexpected behavior in cases where a new object is explicitly
+          # allocated (and later checked, e.g., via ID). See
+          # https://github.com/agentic-ai/enact/issues/54
+          self_field.set_from(target)
+          continue
+        else:
+          wrapper_type = resource_registry.Registry.get().get_wrapper_type(
+            type(self_field))
+          if wrapper_type and not wrapper_type.is_immutable():
+            wrapper_type.set_wrapped_value(self_field, target)
+            continue
       setattr(self, field.name, getattr(copy, field.name))
 
 

@@ -86,12 +86,14 @@ class ResourceTest(unittest.TestCase):
   def test_field_wrapping(self):
     """Tests field wrapping."""
     class Custom:
+      """A custom class."""
       def __init__(self, x: int):
         self.x = x
 
-    @enact.register_wrapper
+    @enact.register
     @dataclasses.dataclass
     class CustomWrapper(enact.ResourceWrapper[Custom]):
+      """A wrapper for Custom."""
       x: int
       @classmethod
       def wrap(cls, wrapped: Custom) -> 'CustomWrapper':

@@ -14,7 +14,6 @@
 
 """Tests for the resource_wrappers module."""
 
-from typing import cast
 import unittest
 
 import numpy as np

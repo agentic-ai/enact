@@ -33,7 +33,7 @@ class CustomType:
   tuple_value: Tuple
 
 
-@enact.register_wrapper
+@enact.register
 @dataclasses.dataclass
 class CustomWrapper(enact.ResourceWrapper[CustomType]):
   """A simple resource for testing."""

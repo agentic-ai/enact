@@ -76,7 +76,9 @@ class PPrinter:
     assert isinstance(v, dict)
     return PPValue(
       '',
-      [PPValue(key, [self.pvalue(item, depth + 1)]) for key, item in v.items()],
+      [PPValue(
+        f'"{key}":',
+        [self.pvalue(item, depth + 1)]) for key, item in v.items()],
       '{', '}')
 
   def from_resource(self, v: interfaces.FieldValue, depth: int) -> PPValue:
@@ -129,7 +131,7 @@ class PPrinter:
         (d + 1, merged_c) for d, merged_c in self._merge(c)]
     result[-1] = (result[-1][0], result[-1][1] + v.close)
     if len(result) == 2:
-      result = [(result[0][0], result[0][1] + ': ' + result[1][1])]
+      result = [(result[0][0], result[0][1] + ' ' + result[1][1])]
     return result
 
   def register(
