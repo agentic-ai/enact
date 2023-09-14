@@ -4,18 +4,14 @@ Enact is a python framework for building generative software, specifically
 software that integrates with machine learning models or APIs that generate
 distributions of outputs.
 
-Generative AI is driving changes in the way software is built. The unique
-challenges of implementing, maintaining and improving generative systems
-indicate a need to rethink the software stack from a first-principles
-perspective. See [why-enact](#why-enact) for a more in-depth discussion.
-
 ## Key features
 
 Enact was created to help developers build generative software. Our focus is on
 offering core framework functionality required for developing, inspecting and
 improving software that samples from generative subsystems such as LLMs and
-diffusion models. To this end, enact boosts your existing python programs by
-giving you the ability to
+diffusion models. See [why-enact](#why-enact) for a more in-depth discussion. To
+this end, enact boosts your existing python programs by giving you the ability
+to
 * recursively track generative executions,
 * persist execution data and system parameters in versioned storage,
 * explore the space of possible system executions via rewind and replay,
