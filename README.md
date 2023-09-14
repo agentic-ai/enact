@@ -20,7 +20,7 @@ giving you the ability to
 * persist execution data and system parameters in versioned storage,
 * explore the space of possible system executions via rewind and replay,
 * turn your existing code into asynchronous flows that can halt and
-  sample input from users and external systems, and
+  sample input from users, and
 * orchestrate higher-order generative flows in which AI systems write and run
   software.
 
