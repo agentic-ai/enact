@@ -20,10 +20,11 @@ to
 * orchestrate higher-order generative flows in which AI systems write and run
   software.
 
-Enact is complementary to libraries that focus on unified integrations with
-generative AI systems. Instead of focusing on particular algorithm schemas for
-orchestrating generative flows (e.g., tree of thought), we aim to provide a
-framework that simplifies the implementation of such schemas.
+Enact represents a first-principles approach to supporting development of
+generative software close to the level of the programming language. It is
+therefore different from and complementary to libraries that focus on unified
+integrations (e.g., API wrappers) or on particular algorithm schemas for
+orchestrating generative flows (e.g., chain/tree-of-thought based approaches).
 
 ## Installation and overview
 
