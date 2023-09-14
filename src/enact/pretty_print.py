@@ -16,8 +16,11 @@
 import dataclasses
 from typing import Any, Callable, List, Optional, Set, Tuple, Type
 
-from enact import interfaces, resource_registry
+from enact import function_wrappers
+from enact import interfaces
+from enact import invocations
 from enact import references
+from enact import resource_registry
 
 
 @dataclasses.dataclass
@@ -168,3 +171,29 @@ def pformat(value: Any,
   return PPrinter(
     max_ref_depth=max_ref_depth,
     skip_repeated_refs=skip_repeated_refs).pformat(value)
+
+
+def invocation_summary(invocation: invocations.Invocation, indent: int=0):
+  """Return a reader-friendly invocation summary."""
+  invokable = f'->{invocation.request().invokable()}'
+  input_value = invocation.get_input()
+  if isinstance(input_value, function_wrappers.CallArgs):
+    args = (
+      [str(a) for a in input_value.args] +
+      [f'{k}={str(v)}' for k, v in input_value.kwargs.items()])
+    all_args = ', '.join(args)
+  else:
+    all_args = str(input_value)
+  if invocation.successful():
+    output = f'= {invocation.get_output()}'
+  elif invocation.response().raised:
+    output = f'raised {invocation.get_raised()}'
+  else:
+    output = 'incomplete'
+
+  prefix = '  ' * indent
+  lines = [
+    f'{prefix}{invokable}({all_args}) {output}',
+    *[f'{invocation_summary(child, indent + 1)}'
+      for child in invocation.get_children()]]
+  return '\n'.join(lines)

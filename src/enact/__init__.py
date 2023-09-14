@@ -31,7 +31,6 @@ from enact.invocations import IncompleteSubinvocationError
 from enact.invocations import InputChanged
 from enact.invocations import InputRequest
 from enact.invocations import InputRequestOutsideInvocation
-from enact.invocations import InvocationGenerator
 from enact.invocations import Invokable
 from enact.invocations import Invocation
 from enact.invocations import ReplayContext
@@ -45,10 +44,13 @@ from enact.invocations import typed_invokable
 from enact.invocations import InvokableBase
 from enact.invocations import WrappedException
 
+from enact.invocation_generators import InvocationGenerator
+
 from enact.pretty_print import pformat
 from enact.pretty_print import pprint
 from enact.pretty_print import PPrinter
 from enact.pretty_print import PPValue
+from enact.pretty_print import invocation_summary
 
 from enact.references import commit
 from enact.references import checkout
