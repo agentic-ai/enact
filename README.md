@@ -218,19 +218,18 @@ Full documentation is work in progress.  See the
 concepts](examples/enact_concepts.ipynb) for more information.
 And take a look at other [examples](examples/).
 
-## Why enact?
+## Why enact - A manifesto
 
-The rise of generative AI models is transforming the software development
-process.
+Generative AI models are transforming the software development process.
 
 Traditional software relies primarily on functional buildings blocks in which
-inputs and system state directly determine outputs. In contrast, modern software
-increasingly utilizes generative AI elements, in which each input is associated
-with a range of possible outputs.
+inputs and system state directly determine outputs. In contrast, software
+that samples one or more generative subsystems associates each input with
+a range of possible outputs.
 
-This seemingly small change in emphasis - from functions to conditional
-distributions - implies a shift across multiple dimensions of the engineering
-process, summarized in the table below.
+This small change in emphasis - from functions to conditional distributions -
+implies a shift across multiple dimensions of the engineering process,
+summarized in the table below.
 
 |        |  Generative   |  Traditional |
 | :----: | :-----------: | :----------: |
@@ -253,53 +252,52 @@ correctly to unusual user inputs or may simply fail to meet a softly defined
 quality target.
 
 Where traditional engineering focuses on implementing features and fixing bugs,
-one of the major goals of generative software engineering is then to fit the
-conditional distribution represented by the system as a whole to a target
-distribution. This target may be specified implicitly, e.g., via sampled human
-inputs or corrections, or explicitly, e.g., by a task reward or example outputs.
+generative software engineering tunes the distribution represented by the system
+as a whole towards some implicitly specified target, e.g., a set of example
+outputs, corrections of previous outputs or task rewards.
 
-In many cases, the process of ongoing finetuning and improvement does not
-have a clearly defined endpoint. This is a departure from traditional software
-engineering, where a feature - once it is implemented and bug-free - requires
-only maintenance-level engineering work.
+In some cases, tuning generative systems can be achieved directly using machine
+learning techniques and frameworks. For instance, systems that consist of a thin
+software wrapper around a monolithic machine learning model may directly train
+the underlying model to shape system behavior.
 
-In some cases, fine-tuning generative systems can be achieved directly using
-machine learning techniques and frameworks. For instance, systems that consist
-of a thin software wrapper around a single large language model (LLM) or
-text-to-image model may directly train the underlying model to shape system
-behavior.
+In other cases, particularly when running complex generative flows that involve
+multiple interacting subcomponents that cannot be easily optimized end-to-end,
+gradient-free methods are necessary to improve system performance. These range
+from using programmers (either human or synthetic) to elaborate the algorithmic
+guard-rails of the generative process, running experiments between API identical
+subsystems or finding ideal parameters (e.g., prompt templates) for individual
+components.
 
-In cases where multiple generative components work together or are called in
-autoregressive feedback loops, the system as a whole may need to be fit to the
-target distribution, which in addition to ML training may involve A/B testing
-between API-identical subsystems and the refinement of simple generative
-components into complex algorithmic flows that structure the generation process.
+### Recursive elaboration and end-to-end compression
 
-### Fitting generative software is a recursive process.
+In generative software, individual components produce distributions that may be
+more or less well-suited to the system's overall goal: An LLM that performs well
+on tabular data may perform less well when used as a chat agent. One fine-tuned
+diffusion model may produce images that are closer to the target style than
+another. This is distinct from the the case of traditional software engineering,
+where the choice between two correct, API-identical implementations of a module
+is of little importance to the behavior of the system as a whole.
 
-In traditional software engineering, the choice between two API-identical
-implementations primarily revolves around practicalities such as performance or
-maintainability. However, in generative software, individual components produce
-distributions that may be more or less well-fitted to the system's overall goal,
-for example, one foundation text-to-image model may outperform another when the
-task is to generate images in a certain style, even though it might not be a
-better image generator in general.
+In addition to a choice between different machine learning models, there is a
+choice between multiple algorithmic elaborations of a given model. The behavior
+of GPT, for example, can be improved by providing algorithmic guardrails that
+structure and steer the generation process such as chain-of-thought or
+tree-of-thought prompting.
 
-Generative system outputs are distributions that optimized towards some, often
-implicitly specified, target. Data selection, training parameters, model
-composition, sampling of feedback and self-improvement flows produce systems
-whose conditional output distributions represent a unique, opinionated take on
-the problem they were trained to solve. Therefore the development of generative
-systems motivates ongoing reevaluation, tuning and replacement of subsystems,
-more so than in traditional engineering applications.
+The profusion of base models and possible algorithmic elaborations of base
+models suggests that gradient-free search methods will take a central place in
+generative software development. This could be as simple as running an
+experiment in which one component is compared against another or as complex as
+searching the space of software, e.g., using LLM-boosted genetic algorithms.
 
-This optimization process involves, on the one hand, recursive elaboration, in
-which a component is replaced by a structured generative flow or algorithm. On
-the other hand, it involves 'compression' of the resulting data into end-to-end
-trained models. For example, a simple call into an LLM can be elaborated by
-exploring a tree of possible completions before settling on a final result, and
-the resulting executions could be used to fine-tune the original LLM.
-
+Once a component has been optimized using such methods, the resulting data can
+be used in gradient-based optimization to 'compress' the gained knowledge into
+end-to-end trained models. This suggests that generative systems will alternate
+gradient-based and gradient-free methods, with the former supplying new training
+signal for the latter. (This loop is the core insight behind algorithms in the
+AlphaZero family, in which data from a search-based elaboration of a model is
+used to train the next iteration of the model.)
 
 ### Generative software is collaborative
 
@@ -316,12 +314,12 @@ of prompt templates and the existence of public databases of fine-tuned models.
 ### Generative software reflects on its executions.
 
 Many popular programming languages offer capacity for reflection, wherein the
-structure of code is programmatically interpretable by other code. In addition
-to this, generative software requires the ability to reflect on code executions.
+structure of code is programmatically interpretable by code. Generative software
+additionally requires _deep reflection_, that is, the ability for code to
+reflect on code execution.
 
-A generative software system specifies a distribution of outputs only
-implicitly. Sampling from it may be computationally intensive and provides
-valuable information that may be used as system feedback or training data. Since
+Sampling a generative model is computationally intensive and provides valuable
+information that may be used as system feedback or training data. Since
 generative software may include complex, recursive algorithms over generative
 components, this suggests a need for not simply tracking inputs and outputs
 at system boundaries, but at every level of execution.
@@ -330,11 +328,6 @@ This is particularly relevant to higher order generative flows, in which the
 output of one generative step structures the execution of the next: Such a
 system can use call traces as feedback to improve its output, in the same way
 that a human may use a debugger to step through an execution to debug an issue.
-
-In contrast, conventional software tracks executions at a low level of
-resolution, e.g., using logging or monitoring frameworks, since their primary
-use is to ensure system health and debug errors that occur in deployment.
-
 
 ### Humans are in the loop
 
