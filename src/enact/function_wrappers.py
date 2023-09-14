@@ -45,7 +45,7 @@ class CallArgs(resources.Resource):
     """Get CallArgs from python call args."""
     return cls(
       cast(List[interfaces.FieldValue],
-           resource_registry.to_field_value(args)),
+           resource_registry.to_field_value(list(args))),
       cast(Dict[str, interfaces.FieldValue],
            resource_registry.to_field_value(kwargs)))
 
@@ -69,6 +69,13 @@ class CallableWrapper(invocations.Invokable[CallArgs, Any]):
       args = [self.instance, *args]
     result = wrapped_callable(*args, **kwargs)
     return result
+
+  def __str__(self):
+    """Return a string representation."""
+    if self.instance:
+      return f'{self.instance}.{self.wrapped().__name__}'
+    else:
+      return self.wrapped().__name__
 
 
 C = TypeVar('C', bound=Callable)
@@ -139,7 +146,7 @@ class Call(invocations.Invokable[CallArgs, Any]):
     return resource_registry.wrap(result)
 
 
-def _get_callable_wrapper(fun: Callable) -> Optional[Type[CallableWrapper]]:
+def get_wrapper_type(fun: Callable) -> Optional[Type[CallableWrapper]]:
   """See if this is a wrapped function and if so, return the CallableWrapper."""
   invokable_wrapper = getattr(fun, '_self_enact_callable_wrapper', None)
   if not invokable_wrapper:
@@ -187,7 +194,7 @@ def invoke(
   else:
     call_args = references.commit(CallArgs.from_python_args(*args, **kwargs))
 
-    invokable_wrapper = _get_callable_wrapper(fun)
+    invokable_wrapper = get_wrapper_type(fun)
     if invokable_wrapper:
       # This helps avoid having a useless Call invokable in the invocation if
       # the type is wrapped.
