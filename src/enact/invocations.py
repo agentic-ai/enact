@@ -652,6 +652,10 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """Subclasses implement this directly or as async."""
     raise NotImplementedError()
 
+  def call(self, *args, **kwargs):
+    """Subclasses implement this directly or as async."""
+    raise NotImplementedError()
+
   @classmethod
   def _check_input_type(cls, value: Any):
     """Check the input type."""
@@ -768,7 +772,7 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
 class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
   """Base class for invokable resources."""
 
-  async def call(self, value: I_contra) -> O_co:
+  async def call(self, value: I_contra) -> O_co:  # pylint: disable=invalid-overridden-method
     """Executes the async invokable."""
     raise NotImplementedError()
 
