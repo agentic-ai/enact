@@ -120,6 +120,30 @@ class RegistryTest(unittest.TestCase):
     self.assertEqual(
       resource_registry.from_field_value(as_fields), type_nest)
 
+  def test_wrap_instance(self):
+    @dataclasses.dataclass(frozen=True)
+    class MyImmutable(enact.ImmutableResource):
+      """Immutable wrapper type."""
+      value: int
+
+    @dataclasses.dataclass(frozen=True)
+    class MyCustomType:
+      """Custom type."""
+      value: int
+
+    registry = enact.Registry()
+    registry.register(MyImmutable)
+    registry.register_instance_wrapper(
+      MyCustomType(3), MyImmutable(3))
+
+    self.assertEqual(
+      registry.wrap(MyCustomType(3)),
+      MyImmutable(3))
+
+    self.assertEqual(
+      registry.unwrap(MyImmutable(3)),
+      MyCustomType(3))
+
   def test_deepcopy_primitives(self):
     """Tests that deep copying primitives works."""
     primitives = [1, 1.0, 'a', bytes([1, 2, 3]), True, False, None]

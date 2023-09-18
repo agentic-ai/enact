@@ -364,9 +364,9 @@ class InvocationsTest(unittest.TestCase):
     @dataclasses.dataclass
     class Counter(enact.Invokable):
       call_count: int = 0
-      def call(self, input_resource: enact.ResourceBase):
+      def call(self, input_value: int):
         self.call_count += 1
-        return input_resource
+        return input_value
 
     with self.store:
       counter = Counter()
@@ -561,13 +561,14 @@ class InvocationsTest(unittest.TestCase):
 class AsyncWrapper(enact.AsyncInvokable):
   """An async wrapper for a sync invokable."""
   fun: enact._InvokableBase
-  async def call(self, *args):
+  async def call(self, arg=None):
     fun = self.fun
     # pylint: disable=not-callable
     if isinstance(fun, enact.InvokableBase):
-      return fun(*args)
+      return fun(arg)
     if isinstance(fun, enact.AsyncInvokable):
-      return await fun(*args)
+      return await fun(arg)
+
 
 @enact.typed_invokable(float, float)
 @dataclasses.dataclass
