@@ -80,9 +80,6 @@ class CallableWrapper(invocations.Invokable[CallArgs, Any]):
 
 C = TypeVar('C', bound=Callable)
 
-class BoundFunctionWrapper(wrapt.BoundFunctionWrapper):
-  """Wrapper for a bound python callable."""
-
 
 class FunctionWrapper(wrapt.FunctionWrapper):
   """Wrapper for a python callable."""
