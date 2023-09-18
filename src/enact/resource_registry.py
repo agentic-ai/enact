@@ -15,9 +15,9 @@
 """Type registration functionality to allow deserialization of resources."""
 
 from typing import (
-  Any, Dict, Iterable, Mapping, Optional, Set, Type, TypeVar, cast)
+  Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Type, TypeVar, cast)
 
-from enact import interfaces
+from enact import interfaces, resources
 
 
 WrappedT = TypeVar('WrappedT')
@@ -163,9 +163,14 @@ class Registry:
   def __init__(self):
     """Initializes a registry."""
     self.allow_reregistration = True
+    # Map from type id to resource type.
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
+    # Map from python types to wrapper types.
     self._wrapped_types: Dict[Type, Type[interfaces.ResourceWrapperBase]] = {}
     self._wrapper_types: Set[Type[interfaces.ResourceWrapperBase]] = set()
+    # Map from python instances to instance wrapper resources.
+    self._wrapped_instances: Dict[Hashable, resources.ImmutableResource] = {}
+    self._instance_wrappers: Dict[resources.ImmutableResource, Hashable] = {}
     self.register(NoneWrapper)
     self.register(IntWrapper)
     self.register(FloatWrapper)
@@ -201,6 +206,27 @@ class Registry:
       raise ResourceNotFound(f'No type registered for {type_id}')
     return resource_class
 
+  def register_instance_wrapper(
+      self, instance: Hashable, wrapper: resources.ImmutableResource):
+    """Register a wrapper type for a hashable instance.
+
+    This is useful for registering functions to their wrappers.
+
+    Args:
+      instance: An instance. Must be hashable.
+      wrapper: An immutable wrapper instance.
+    """
+    if isinstance(instance, interfaces.ResourceBase):
+      raise TypeError('Cannot wrap a resource instance.')
+    if isinstance(instance, type):
+      raise TypeError(
+        'Cannot wrap a type instance. Use a ResourceWrapper instead.')
+    if not wrapper.type_id() in self._type_map:
+      raise RegistryError(
+        f'Instance wrapper type {type(wrapper)} is not registered.')
+    self._instance_wrappers[wrapper] = instance
+    self._wrapped_instances[instance] = wrapper
+
   def _register_resource_wrapper(self, wrapper_type: Type[WrapperT]):
     """Register a new wrapper type."""
     self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
@@ -225,6 +251,10 @@ class Registry:
     """Wrap a value if necessary."""
     if isinstance(value, interfaces.ResourceBase):
       return value
+    if isinstance(value, Hashable):
+      instance_wrapper = self._wrapped_instances.get(value)
+      if instance_wrapper:
+        return instance_wrapper
     wrapper = self.get_wrapper_type(type(value))
     if wrapper:
       return wrapper.wrap(value)
@@ -245,6 +275,9 @@ class Registry:
 
   def unwrap(self, value: interfaces.ResourceBase) -> Any:
     """Unwrap a value if wrapped."""
+    if (isinstance(value, resources.ImmutableResource) and
+        value in self._instance_wrappers):
+      return self._instance_wrappers[value]
     if isinstance(value, interfaces.ResourceWrapperBase):
       return value.unwrap()
     return value
@@ -254,7 +287,6 @@ class Registry:
     if issubclass(value, interfaces.ResourceWrapperBase):
       return value.wrapped_type()
     return value
-
 
   @classmethod
   def get(cls) -> 'Registry':
@@ -300,7 +332,7 @@ def unwrap_type(value: Type[interfaces.ResourceBase]) -> Type:
   return Registry.get().unwrap_type(value)
 
 
-def deepcopy(value: Any):
+def deepcopy(value: WrappedT) -> WrappedT:
   """Deep copy a value."""
   return from_field_value(to_field_value(value))
 

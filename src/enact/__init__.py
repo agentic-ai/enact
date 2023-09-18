@@ -63,6 +63,7 @@ from enact.references import InMemoryStore
 from enact.references import FileStore
 
 from enact.resources import Resource
+from enact.resources import ImmutableResource
 from enact.resources import ResourceWrapper
 
 from enact.registration import register

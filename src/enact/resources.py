@@ -25,16 +25,11 @@ from enact import resource_registry
 
 FieldValue = interfaces.FieldValue
 
-C = TypeVar('C', bound='Resource')
+C = TypeVar('C', bound='_Resource')
 
 
-@dataclasses.dataclass
-class Resource(interfaces.ResourceBase):
-  """Base class for dataclass-based resources.
-
-  Subclasses must be registered with the @enact.register decorator in order
-  to allow deserialization from references.
-  """
+class _Resource(interfaces.ResourceBase):
+  """Base class for Resource and FrozenResource."""
 
   @classmethod
   def type_descr(cls) -> Dict[str, interfaces.Json]:
@@ -47,7 +42,7 @@ class Resource(interfaces.ResourceBase):
   @classmethod
   def field_names(cls) -> Iterable[str]:
     """Returns the names of the fields of the resource."""
-    return (f.name for f in dataclasses.fields(cls))
+    return (f.name for f in dataclasses.fields(cls))  # type: ignore
 
   def field_values(self) -> Iterable[FieldValue]:
     """Return a list of field values, aligned with field_names."""
@@ -62,7 +57,16 @@ class Resource(interfaces.ResourceBase):
                     for k, v in field_values.items()}
     return cls(**field_values)
 
-  def set_from(self: C, other: C):
+ResourceT = TypeVar('ResourceT', bound='Resource')
+
+@dataclasses.dataclass
+class Resource(_Resource):
+  """Base class for dataclass-based resources.
+
+  Subclasses must be registered with the @enact.register decorator in order
+  to allow deserialization from references.
+  """
+  def set_from(self, other: interfaces.ResourceBase):
     """Sets the fields of this resource from another resource.
 
     Implementation of set_from is required to support replays of invokable
@@ -92,6 +96,23 @@ class Resource(interfaces.ResourceBase):
             wrapper_type.set_wrapped_value(self_field, target)
             continue
       setattr(self, field.name, getattr(copy, field.name))
+
+
+@dataclasses.dataclass(frozen=True)
+class ImmutableResource(_Resource):
+  """Base class for immutable dataclass-based resources.
+
+  Subclasses must be registered with the @enact.register decorator in order
+  to allow deserialization from references.
+  """
+  def set_from(self, other: interfaces.ResourceBase):
+    """Sets the fields of this resource from another resource.
+
+    Implementation of set_from is required to support replays of invokable
+    resources that change their internal state during execution.
+    """
+    if not self == other:
+      raise TypeError(f'Cannot call set_from on immutable resource {self}.')
 
 
 WrappedT = TypeVar('WrappedT')
