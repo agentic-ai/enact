@@ -1,6 +1,6 @@
 [project]
 name = "enact"
-version = "0.4.0.dev8"
+version = "0.4.0.dev9"
 dependencies = [
   "gradio",
   "numpy",
