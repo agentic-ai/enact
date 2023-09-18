@@ -111,7 +111,7 @@ class ImmutableResource(_Resource):
     Implementation of set_from is required to support replays of invokable
     resources that change their internal state during execution.
     """
-    if not self == other:
+    if self != other:
       raise TypeError(f'Cannot call set_from on immutable resource {self}.')
 
 

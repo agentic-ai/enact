@@ -59,11 +59,12 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     assert len(field_dict) == 1
     return cls(field_dict['wrapped'])
 
-  def set_from(self: FieldValueWrapperT, other: FieldValueWrapperT):
+  def set_from(self, other: interfaces.ResourceBase):
     """Sets the fields of this resource from another resource."""
     if not type(self) is type(other):
       raise RegistryError(
         f'Cannot set fields from {type(other)} to {type(self)}.')
+    assert isinstance(other, FieldValueWrapper)
     self.wrapped = other.deepcopy_resource().wrapped
 
   @classmethod
@@ -153,6 +154,10 @@ class DictWrapper(FieldValueWrapper[dict]):
   def set_wrapped_value(cls, target: dict, src: dict):
     target.clear()
     target.update(src)
+
+
+class MissingWrapperError(interfaces.FieldTypeError):
+  """Raised when a required wrapper is missing."""
 
 
 class Registry:
@@ -258,7 +263,7 @@ class Registry:
     wrapper = self.get_wrapper_type(type(value))
     if wrapper:
       return wrapper.wrap(value)
-    raise interfaces.FieldTypeError(
+    raise MissingWrapperError(
       f'Cannot wrap value of type {type(value)}. Please register '
       f'a ResourceWrapper for this type.')
 
@@ -269,7 +274,7 @@ class Registry:
     wrapper = self.get_wrapper_type(value)
     if wrapper:
       return wrapper
-    raise interfaces.FieldTypeError(
+    raise MissingWrapperError(
       f'Cannot wrap type {value}. Please register '
       f'a ResourceWrapper for this type.')
 
@@ -303,6 +308,12 @@ def register(cls: Type[ResourceT]) -> Type[ResourceT]:
   """Decorator for resource classes."""
   Registry.get().register(cls)
   return cls
+
+
+def register_instance_wrapper(
+    instance: Hashable, wrapper: resources.ImmutableResource):
+  """Decorator for resource classes."""
+  Registry.get().register_instance_wrapper(instance, wrapper)
 
 
 def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:

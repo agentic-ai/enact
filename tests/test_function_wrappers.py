@@ -104,6 +104,7 @@ class FunctionWrappersTest(unittest.TestCase):
     with self.store:
       invocation = enact.invoke(python_to_python, (3,))
       self.assertEqual(invocation.get_output(), '3')
+      self.assertEqual(invocation.request().invokable(), python_to_python)
 
   def test_invoke_unregistered(self):
     """Test invoking an unregistered function."""
@@ -124,11 +125,10 @@ class FunctionWrappersTest(unittest.TestCase):
       invocation = enact.invoke(unregistered, (3,))
       self.assertEqual(invocation.get_output(), '3')
       (child,) = invocation.get_children()
-      self.assertEqual(child.request().invokable().wrapped(), python_to_python)
+      self.assertEqual(child.request().invokable(), python_to_python)
 
   def test_invoke_invokable(self):
     """Tests invoking a standard invokable."""
-
     with self.store:
       self.assertEqual(
         enact.invoke(MyInvokable(), (3,)).get_output(), '3')
@@ -251,3 +251,37 @@ class FunctionWrappersTest(unittest.TestCase):
       self.assertEqual(invocation.get_child(1).get_child(1).get_output(), 6)
       # str(4 + 6 - 1)
       self.assertEqual(invocation.get_child(1).get_child(2).get_output(), '9')
+
+  def test_register_classmethod_fails(self):
+    """Tests that classmethods can't be tracked (for now)."""
+    with self.assertRaises(TypeError):
+      class MyClass:  # pylint: disable=unused-variable
+        @enact.register
+        @classmethod
+        def foo(cls, x: int):
+          return str(x)
+
+  def test_callable_argument(self):
+    """Tests that registered functions can be arguments to other functions."""
+    bar_suffix = 'bla'
+
+    @enact.register
+    def foo(fun):
+      return fun() + fun()
+
+    @enact.register
+    def bar():
+      return 'bar' + bar_suffix
+
+    self.assertEqual(foo(bar), 'barblabarbla')
+    with self.store:
+      invocation = enact.invoke(foo, (bar,))
+      self.assertEqual(invocation.get_output(), 'barblabarbla')
+      self.assertEqual(invocation.get_child(0).get_output(), 'barbla')
+      self.assertEqual(invocation.get_child(1).get_output(), 'barbla')
+
+      bar_suffix = 'blo'
+      invocation = invocation.rewind().replay()
+      self.assertEqual(invocation.get_output(), 'barblabarblo')
+      self.assertEqual(invocation.get_child(0).get_output(), 'barbla')
+      self.assertEqual(invocation.get_child(1).get_output(), 'barblo')

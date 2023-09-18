@@ -15,9 +15,10 @@
 """Wrappers for python callables."""
 
 import abc
+import inspect
 from typing import (
   Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type, TypeVar,
-  cast)
+  Union, cast)
 import wrapt  # type: ignore
 import dataclasses
 
@@ -50,8 +51,30 @@ class CallArgs(resources.Resource):
            resource_registry.to_field_value(kwargs)))
 
 
+invocations.typed_invokable(CallArgs, None)
+@dataclasses.dataclass(frozen=True)
+class CallableWrapper(
+    resources.ImmutableResource,
+    invocations.InvokableBase):
+  """An immutable wrapper for a non-member callable."""
+
+  def call(self, arg: CallArgs) -> Any:
+    args, kwargs = arg.to_python_args()
+    return self.wrapped()(*args, **kwargs)
+
+  @classmethod
+  @abc.abstractmethod
+  def wrapped(cls) -> Callable:
+    """Return the wrapped callable."""
+    raise NotImplementedError()
+
+  def __str__(self):
+    """Return a string representation."""
+    return self.wrapped().__name__
+
+
 @dataclasses.dataclass
-class CallableWrapper(invocations.Invokable[CallArgs, Any]):
+class MemberCallableWrapper(invocations.Invokable[CallArgs, Any]):
   """Invokable wrapper for a python callable."""
   instance: Any
 
@@ -84,34 +107,67 @@ C = TypeVar('C', bound=Callable)
 class FunctionWrapper(wrapt.FunctionWrapper):
   """Wrapper for a python callable."""
 
-  def __init__(self,
-               wrapped: Callable,
-               wrapper: Callable,
-               callable_wrapper: Type[CallableWrapper]):
+  def __init__(
+      self,
+      wrapped: Callable,
+      wrapper: Callable,
+      wrapper_type_or_instance: Union[
+        Type[MemberCallableWrapper], CallableWrapper]):
     super().__init__(wrapped, wrapper)
-    self._self_enact_callable_wrapper = callable_wrapper
+    self._self_enact_callable_wrapper = wrapper_type_or_instance
+
+
+def _is_instance_or_class_method(fun: Callable) -> bool:
+  """Tries to establish whether this is an instance or class method."""
+  params = inspect.signature(fun).parameters
+  if len(params) == 0:
+    return False
+  first_param_name, *_ = params
+  if first_param_name in ('self', 'cls'):
+    return True
+  return False
 
 
 def register(fun: C) -> C:
   """Decorator for registering a wrapped function."""
-  class _Wrapper(CallableWrapper):
-    """Wrapper for a python callable."""
-    @classmethod
-    def wrapped(cls):
-      return fun
-  _Wrapper.__module__ = fun.__module__
-  _Wrapper.__name__ = fun.__name__
-  _Wrapper.__qualname__ = fun.__qualname__
+  if _is_instance_or_class_method(fun):
+    class _MemberWrapper(MemberCallableWrapper):
+      """Member or class wrapper."""
+      @classmethod
+      def wrapped(cls):
+        return fun
+    _MemberWrapper.__module__ = fun.__module__
+    _MemberWrapper.__name__ = fun.__name__
+    _MemberWrapper.__qualname__ = fun.__qualname__
+    resource_registry.register(_MemberWrapper)
 
-  resource_registry.register(_Wrapper)
+    def _wrapper_fun(unused_wrapped, instance, args, kwargs):
+      call_args = CallArgs.from_python_args(*args, **kwargs)
+      wrapper = _MemberWrapper(instance)
+      return wrapper(call_args)
+    function_wrapper = FunctionWrapper(
+      fun, _wrapper_fun, _MemberWrapper)
+  else:
+    class _Wrapper(CallableWrapper):
+      """Member or class wrapper."""
+      @classmethod
+      def wrapped(cls):
+        return fun
+    _Wrapper.__module__ = fun.__module__
+    _Wrapper.__name__ = fun.__name__
+    _Wrapper.__qualname__ = fun.__qualname__
+    invocations.typed_invokable(CallArgs, None)(_Wrapper)
 
-  def _wrapper_fun(unused_wrapped, instance, args, kwargs):
-    call_args = CallArgs.from_python_args(*args, **kwargs)
-    wrapper = _Wrapper(instance)
-    result = wrapper(call_args)
-    return resource_registry.unwrap(result)
+    wrapper = _Wrapper()
+    def _wrapper_fun(unused_wrapped, instance, args, kwargs):
+      assert not instance
+      call_args = CallArgs.from_python_args(*args, **kwargs)
+      return wrapper(call_args)
+    function_wrapper = FunctionWrapper(
+      fun, _wrapper_fun, wrapper)
+    resource_registry.register_instance_wrapper(
+      function_wrapper, wrapper)
 
-  function_wrapper = FunctionWrapper(fun, _wrapper_fun, _Wrapper)
   return function_wrapper
 
 
@@ -143,7 +199,8 @@ class Call(invocations.Invokable[CallArgs, Any]):
     return resource_registry.wrap(result)
 
 
-def get_wrapper_type(fun: Callable) -> Optional[Type[CallableWrapper]]:
+def get_wrapper_instance_or_type(fun: Callable) -> Optional[
+  Union[Type[MemberCallableWrapper], CallableWrapper]]:
   """See if this is a wrapped function and if so, return the CallableWrapper."""
   invokable_wrapper = getattr(fun, '_self_enact_callable_wrapper', None)
   if not invokable_wrapper:
@@ -156,7 +213,7 @@ def get_wrapper_type(fun: Callable) -> Optional[Type[CallableWrapper]]:
 
 
 def invoke(
-    fun: C,
+    fun: Callable,
     args: Sequence=(),
     kwargs: Optional[Mapping[str, Any]]=None,
     replay_from: Optional[invocations.Invocation]=None,
@@ -179,19 +236,33 @@ def invoke(
     commit: Whether to commit the invocation after invoking.
   """
   kwargs = kwargs or {}
-  if isinstance(fun, invocations.Invokable):
+  try:
+    wrapped = resource_registry.wrap(fun)  # Try wrapping the callable.
+  except interfaces.FieldTypeError:
+    wrapped = None
+  call_args: Optional[references.Ref] = None
+  if wrapped:
+    if not callable(wrapped):
+      raise TypeError(
+        f'The wrapper {wrapped} of {fun} is not callable.')
+    fun = wrapped
+  if isinstance(fun, invocations.InvokableBase):
     invokable = fun
-    if len(args) > 1 or kwargs:
-      raise ValueError(
-        'Invokables can only be invoked with up to one arg and no kwargs.')
-    if args:
-      call_args = references.commit(args[0])
+    if fun.get_input_type() == CallArgs:
+      call_args = references.commit(CallArgs.from_python_args(
+        *args, **kwargs))
     else:
-      call_args = references.commit(None)
+      if len(args) > 1 or kwargs:
+        raise ValueError(
+          'Invokables can only be invoked with up to one arg and no kwargs.')
+      if args:
+        call_args = references.commit(args[0])
+      else:
+        call_args = references.commit(None)
   else:
     call_args = references.commit(CallArgs.from_python_args(*args, **kwargs))
 
-    invokable_wrapper = get_wrapper_type(fun)
+    invokable_wrapper = get_wrapper_instance_or_type(fun)
     if invokable_wrapper:
       # This helps avoid having a useless Call invokable in the invocation if
       # the type is wrapped.

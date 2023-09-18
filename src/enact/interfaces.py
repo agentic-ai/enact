@@ -182,7 +182,7 @@ class ResourceBase:
       for k, v in resorce_dict.items()}
     return cls.from_fields(field_dict)
 
-  def set_from(self: C, other: C):
+  def set_from(self, other: 'ResourceBase'):
     """Sets the fields of this resource from another resource.
 
     Implementation of set_from is required to support replays of invokable
