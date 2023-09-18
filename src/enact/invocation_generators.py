@@ -54,7 +54,7 @@ class InvocationGenerator(Generic[I_contra, O_co]):
       return InvocationGenerator(
         invokable=fun,
         input_ref=references.commit(arg))
-    if not function_wrappers.get_wrapper_type(fun):
+    if not function_wrappers.get_wrapper_instance_or_type(fun):
       raise ValueError(
         'Cannot use invocation generator with an unregistered function.')
     invocation = function_wrappers.invoke(fun, args, kwargs)

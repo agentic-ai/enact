@@ -213,7 +213,7 @@ class Request(Generic[I_contra, O_co], resources.Resource):
 @dataclasses.dataclass
 class Response(Generic[I_contra, O_co], resources.Resource):
   """An invocation response."""
-  invokable: references.Ref['_InvokableBase[I_contra, O_co]']
+  invokable: references.Ref[Callable]
   output: Optional[references.Ref[O_co]]
   # Exception raised during call.
   raised: Optional[references.Ref[ExceptionResource]]
@@ -299,7 +299,7 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
       strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replay the invocation, retrying exceptions or overiding them."""
-    invokable = self.request().invokable()
+    invokable = resource_registry.wrap(self.request().invokable())
     if isinstance(invokable, AsyncInvokableBase):
       raise InvocationError(
         'Cannot replay async invocations synchronously. '
@@ -317,7 +317,7 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
       strict: bool=True) -> (
         'Invocation[I_contra, O_co]'):
     """Replay the invocation, retrying exceptions or overiding them."""
-    invokable = self.request().invokable()
+    invokable = resource_registry.wrap(self.request().invokable())
     if isinstance(invokable, InvokableBase):
       raise InvocationError(
         'Cannot replay synchronous invocations asynchronously. '
@@ -431,7 +431,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
         raise ReplayError(
           f'Expected invocation {invokable}({input_resource}) but got '
           f'{child().request().invokable()}({child().request().input()}).\n'
-          f'Ensure that calls to subinvokable are deterministic '
+          f'Ensure that calls to subinvokables are deterministic '
           f'or use strict=False.')
     else:
       # No matching replay found.
@@ -444,7 +444,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
 
     # Replay successful executions.
     if replay_response.output:
-      invokable.set_from(replay_response.invokable())
+      invokable.set_from(resource_registry.wrap(replay_response.invokable()))
       Builder.register_replayed_subinvocations(replay_children)
       return replay_response.output(), ReplayContext(
         replay_children,
@@ -456,7 +456,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       # We only override exceptions at the point of the stack where they were
       # originally raised.
       override = self._exception_override(replay_response.raised)
-      invokable.set_from(replay_response.invokable())
+      invokable.set_from(resource_registry.wrap(replay_response.invokable()))
       if override is not None:
         # Typecheck the override.
         output_type = invokable.get_output_type()
@@ -591,7 +591,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       self.exception_raised = exception
       raised_here = not self._is_child_exception(exception)
     subinvocations = self._get_subinvocations()
-    response = Response(
+    response: Response = Response(
       references.commit(self.invokable), output_ref,
       exception_ref, raised_here, children=subinvocations)
     self._invocation = Invocation(
