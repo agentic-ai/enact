@@ -85,6 +85,7 @@ class Context:
     finally:
       context_var.reset(token)
 
+
   @classmethod
   def get_current(cls: Type[C]) -> Optional[C]:
     """Returns the current context of this type or None."""

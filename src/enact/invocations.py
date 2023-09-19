@@ -699,9 +699,9 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
     """Creates an exit stack for invoking an invokable."""
     exit_stack = contextlib.ExitStack()
     # Execute in a top-level context to ensure that there are no parents.
+    exit_stack.enter_context(ReplayContext.top_level())
     exit_stack.enter_context(Builder.top_level())
     if replay_from:
-      exit_stack.enter_context(ReplayContext.top_level())
       exit_stack.enter_context(ReplayContext(
         [references.commit(replay_from)],
         exception_override, strict))
