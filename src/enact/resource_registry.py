@@ -257,7 +257,10 @@ class Registry:
     if isinstance(value, interfaces.ResourceBase):
       return value
     if isinstance(value, Hashable):
-      instance_wrapper = self._wrapped_instances.get(value)
+      try:
+        instance_wrapper = self._wrapped_instances.get(value)
+      except TypeError:
+        instance_wrapper = None
       if instance_wrapper:
         return instance_wrapper
     wrapper = self.get_wrapper_type(type(value))
