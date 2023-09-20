@@ -79,6 +79,10 @@ def register(registerable: RegisterableT) -> RegisterableT:
       issubclass(registerable, interfaces.ResourceBase)):
     return cast(RegisterableT, resource_registry.register(registerable))
   elif callable(registerable):
+    if isinstance(registerable, type):
+      raise TypeError(
+        f'Cannot register callable type {registerable} as a function. '
+        f'Please inherit from Invokable to register callable types.')
     return cast(RegisterableT, function_wrappers.register(registerable))
   else:
     raise TypeError(f'Cannot register {registerable}')
