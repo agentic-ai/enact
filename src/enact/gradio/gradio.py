@@ -223,6 +223,9 @@ class JsonFieldWidget(EnactWidget):
     """Initializes the component."""
     super().__init__()
     self._type = resource_type
+    if not issubclass(self._type, interfaces.ResourceBase):
+      self._type = resource_registry.wrap_type(self._type)
+
     self._serializer = serialization.JsonSerializer()
     self._boxes: Dict[str, gr.Textbox] = {}
     with gr.Group():
@@ -378,17 +381,15 @@ class GUI:
 
   def _invoke(self, *args) -> Optional[references.Ref[invocations.Invocation]]:
     """Invoke the object."""
-    input_resource = self.input_widget.get(
+    input_value = self.input_widget.get(
       *args[:len(self.input_widget.components)])
-    if not input_resource:
-      return None
     last_invocation = self.invocation_widget.get(*args[len(
       self.input_widget.components):])
     invokable = self._invokable
     if last_invocation:
       assert isinstance(last_invocation, references.Ref)
       invokable = last_invocation().response().invokable
-    invocation = invokable().invoke(references.commit(input_resource))
+    invocation = invokable().invoke(references.commit(input_value))
     return references.commit(invocation)
 
   def _continue(self, *args) -> Optional[
