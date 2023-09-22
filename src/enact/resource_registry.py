@@ -81,6 +81,43 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     return from_field_value(self.wrapped)
 
 
+class NoneWrapper(interfaces.ResourceWrapperBase):
+  """Wrapper for None."""
+  @classmethod
+  def wrapped_type(cls) -> Type[None]:
+    return type(None)
+
+  @classmethod
+  def field_names(cls) -> Iterable[str]:
+    """Returns the names of the fields of the resource."""
+    return ()
+
+  def field_values(self) -> Iterable[interfaces.FieldValue]:
+    return ()
+
+  @classmethod
+  def from_fields(
+      cls, field_dict: Mapping[str, interfaces.FieldValue]) -> 'NoneWrapper':
+    assert len(field_dict) == 0
+    return cls()
+
+  def set_from(self, other: interfaces.ResourceBase):
+    """Sets the fields of this resource from another resource."""
+    if not type(self) is type(other):
+      raise RegistryError(
+        f'Cannot set fields from {type(other)} to {type(self)}.')
+
+  @classmethod
+  def wrap(cls, value: WrappedT) -> 'NoneWrapper':
+    """Wrap a value directly."""
+    assert isinstance(value, cls.wrapped_type()), (
+      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return NoneWrapper()
+
+  def unwrap(self) -> None:
+    """Unwrap a value directly."""
+    return None
+
 
 class PrimitiveWrapper(FieldValueWrapper[WrappedT]):
   """Wrapper for primitives."""
@@ -88,13 +125,6 @@ class PrimitiveWrapper(FieldValueWrapper[WrappedT]):
   @classmethod
   def is_immutable(cls) -> bool:
     return True
-
-
-class NoneWrapper(PrimitiveWrapper[None]):
-  """Wrapper for None."""
-  @classmethod
-  def wrapped_type(cls) -> Type[None]:
-    return type(None)
 
 
 class IntWrapper(PrimitiveWrapper[int]):
