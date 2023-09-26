@@ -95,3 +95,11 @@ class RegistrationTest(unittest.TestCase):
         pass
     with self.assertRaises(TypeError):
       enact.register(StaticCall)
+
+  def test_register_type_not_resource(self):
+    """Test type error on non-resource."""
+    class NotAResource:
+      """A class that is not a resource."""
+      pass
+    with self.assertRaises(TypeError):
+      enact.register(NotAResource)
