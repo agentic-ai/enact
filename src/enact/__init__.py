@@ -16,6 +16,8 @@
 
 from enact.function_wrappers import invoke
 
+from enact.resource_digests import resource_digest
+
 from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
