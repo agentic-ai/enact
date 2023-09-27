@@ -32,6 +32,10 @@ class TupleWrapper(resources.ResourceWrapper[tuple]):
   value: list
 
   @classmethod
+  def is_immutable(cls) -> bool:
+    return True
+
+  @classmethod
   def wrapped_type(cls) -> Type[tuple]:
     return tuple
 

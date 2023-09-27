@@ -320,9 +320,24 @@ class InvocationsTest(unittest.TestCase):
         enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: 100):
+          exception_override=lambda x: enact.commit(100)):
         result = fun(0)
       self.assertEqual(result, 106)
+
+  def test_replay_call_override_none(self):
+    """Test replaying a call with a None override."""
+    @enact.register
+    def foo() -> int:
+      enact.request_input(type(None))
+      return 1
+
+    with self.store:
+      invocation = enact.invoke(foo)
+      with enact.ReplayContext(
+          subinvocations=[enact.commit(invocation)],
+          exception_override=lambda x: enact.commit(None)):
+        result = foo()
+      self.assertEqual(result, 1)
 
   def test_replay_invocation(self):
     """Test replaying an invocation."""
@@ -411,7 +426,7 @@ class InvocationsTest(unittest.TestCase):
         enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: 100, strict=False):
+          exception_override=lambda x: enact.commit(100), strict=False):
         with self.assertRaises(ValueError):
           # Exception override is not active since we're ignoring the
           # replay.
@@ -425,7 +440,7 @@ class InvocationsTest(unittest.TestCase):
         enact.commit(0))
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
-          exception_override=lambda x: 100, strict=True):
+          exception_override=lambda x: enact.commit(100), strict=True):
         with self.assertRaises(enact.ReplayError):
           fun(1)
 
@@ -438,7 +453,7 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(
         enact.commit(0),
         replay_from=invocation,
-        exception_override=lambda x: 100)
+        exception_override=lambda x: enact.commit(100))
       self.assertEqual(invocation.get_output(), 106)
 
   def test_request_input(self):
@@ -723,6 +738,6 @@ class AsyncInvocationsTest(unittest.TestCase):
         input_request = exception_ref()
         assert isinstance(input_request, enact.InputRequest)
         context = cast(int, input_request.context)
-        return context + 1
+        return enact.commit(context + 1)
       invocation = asyncio.run(invocation.replay_async(exception_override))
       self.assertEqual(invocation.get_output(), list(range(1, 11)))

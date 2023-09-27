@@ -103,18 +103,28 @@ class EnactWidget(abc.ABC):
 
 RW = TypeVar('RW', bound='RefWidget')
 
+
 class RefWidget(EnactWidget):
   """A UI widget that represents a reference."""
+
+  def _create_digest_display(self, **kwargs) -> gr.components.Component:
+    """Returns a component displaying the digest of the reference."""
+    return gr.Textbox(show_label=False, **kwargs)
+
+  def _set_digest_display(self, value, **kwargs) -> gr.components.Component:
+    """Returns a component displaying the digest of the reference."""
+    display = cast(gr.Textbox, self.digest_display)
+    return display.update(value=value, **kwargs)
 
   def __init__(self, **kwargs):
     super().__init__()
     with gr.Group():
-      self.digest_box = self.add(gr.Textbox(show_label=False, **kwargs))
+      self.digest_display = self.add(self._create_digest_display(**kwargs))
       with gr.Accordion(label='Referenced resource', open=True):
         kwargs['interactive'] = False
         self.ref_details = self.add(
           gr.Markdown(**kwargs, value='```\nNo reference selected\n```'))
-    self.change = self.digest_box.change
+    self.change = self.digest_display.change
 
     def changed_ref_id(ref_id: str) -> Dict:
       """Performs necessary updates when ref id changes."""
@@ -130,7 +140,7 @@ class RefWidget(EnactWidget):
         value=f'```\n{pretty_print.pformat(resource)}\n```')
 
     self.change(contexts.with_current_contexts(changed_ref_id),
-                inputs=[self.digest_box],
+                inputs=[self.digest_display],
                 outputs=[self.ref_details])
 
   @classmethod
@@ -144,11 +154,11 @@ class RefWidget(EnactWidget):
     """Set content and properties of UI elements."""
     if not value:
       return [
-        self.digest_box.update(value='', **kwargs),
+        self._set_digest_display(value='', **kwargs),
         self.ref_details.update(**kwargs)]
     assert isinstance(value, references.Ref)
     return [
-      self.digest_box.update(value=value.id, **kwargs),
+        self._set_digest_display(value=value.id, **kwargs),
       self.ref_details.update(**kwargs)]
 
   def get(self, *component_values) -> Optional[interfaces.ResourceBase]:
@@ -157,6 +167,37 @@ class RefWidget(EnactWidget):
     if not ref_box_value:
       return None
     return references.Ref.from_id(ref_box_value)
+
+class InvocationHistory(RefWidget):
+  """A UI widget that represents a reference."""
+
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    self._state = gr.State(value=[])
+
+    def _add_to_state(invocation_id: str, state_value: List[str]):
+      try:
+        references.Ref.from_id(invocation_id)
+      except:  # pylint: disable=bare-except
+        return state_value
+      if invocation_id not in state_value:
+        # We've already seen this invocation.
+        state_value.append(invocation_id)
+      return state_value, self.digest_display.update(choices=state_value)
+
+    self.change(
+      _add_to_state,
+      inputs=[self.digest_display, self._state],
+      outputs=[self._state, self.digest_display])
+
+  def _create_digest_display(self, **kwargs) -> gr.components.Component:
+    """Returns a component displaying the digest of the reference."""
+    return gr.Dropdown(show_label=False, **kwargs)
+
+  def _set_digest_display(self, value, **kwargs) -> gr.components.Component:
+    """Returns a component displaying the digest of the reference."""
+    display = cast(gr.Dropdown, self.digest_display)
+    return display.update(value=value, **kwargs)
 
 
 class ImageWidget(EnactWidget):
@@ -268,7 +309,7 @@ class JsonFieldWidget(EnactWidget):
       updates.append(self._boxes[field_name].update(**update_dict))
     return updates
 
-  def get(self, *component_values) -> Optional[Any]:
+  def get(self, *component_values) -> Any:
     """Returns the current contents as a resource."""
     resource_dict = interfaces.ResourceDict(self._type)
     for field_name, value in zip(self._type.field_names(), component_values):
@@ -300,10 +341,10 @@ class GUI:
     """
     self._invokable = invokable
     self._input_required_inputs = input_required_inputs or [
-      str
+      str, type(None), int, float, bool, PIL.Image.Image
     ]
     self._input_required_outputs = input_required_outputs or [
-      str
+      str, type(None), int, float, bool, PIL.Image.Image
     ]
 
     input_type = self._invokable().get_input_type()
@@ -319,7 +360,7 @@ class GUI:
     self._blocks: Optional[gr.Blocks] = None
     self._input_widget: Optional[EnactWidget] = None
     self._output_widget: Optional[EnactWidget] = None
-    self._invocation_widget: Optional[RefWidget] = None
+    self._invocation_widget: Optional[InvocationHistory] = None
     self._input_required_input_widgets: Dict[
       Type[interfaces.ResourceBase], EnactWidget] = {}
     self._input_required_output_widgets: Dict[
@@ -344,7 +385,7 @@ class GUI:
     return self._output_widget
 
   @property
-  def invocation_widget(self) -> RefWidget:
+  def invocation_widget(self) -> InvocationHistory:
     """Invocation widget of GUI."""
     assert self._invocation_widget, 'Blocks not generated yet.'
     return self._invocation_widget
@@ -404,15 +445,12 @@ class GUI:
     assert isinstance(raised, invocations.InputRequest)
     requested_type = raised.requested_type
 
-    user_input: Optional[interfaces.ResourceBase]
+    user_input: Optional[interfaces.ResourceBase] = None
     for handled_type, widget in self._input_required_input_widgets.items():
       if handled_type == requested_type:
         user_input = widget.consume(component_values)
       else:
         widget.consume_args(component_values)
-
-    if user_input is None:
-      return None
     continued = raised.continue_invocation(invocation, user_input)
     return references.commit(continued)
 
@@ -464,7 +502,7 @@ class GUI:
 
       with gr.Group():
         with gr.Accordion(label='Invocation details', open=False):
-          self._invocation_widget = RefWidget()
+          self._invocation_widget = InvocationHistory()
 
       run_button = gr.Button('Run')
       def get_invocation(*args):
@@ -510,7 +548,7 @@ class GUI:
           input_required_widgets = self._input_required_output_widgets
 
         for resource_type, widget in input_required_widgets.items():
-          if input_type and input_type == resource_type:
+          if input_type and issubclass(input_type, resource_type):
             found = True
             kwargs['visible'] = True
             updates_list += widget.set(input_resource, **kwargs)
@@ -604,7 +642,7 @@ class GUI:
         inputs=self._input_widget.components +
                self._invocation_widget.components)
 
-      # Continue the invokation on click Continue.
+      # Continue the invocation on click Continue.
       self.invocation_widget.set_from_event(
         continue_button.click,
         contexts.with_current_contexts(self._continue),
