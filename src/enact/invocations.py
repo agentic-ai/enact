@@ -127,7 +127,7 @@ class InputRequest(ExceptionResource):
     ref = references.commit(self)
     def _exception_override(exception_ref: references.Ref[ExceptionResource]):
       if exception_ref == ref:
-        return value
+        return references.commit(value)
       return None
     return invocation.replay(
       exception_override=_exception_override, strict=strict)
@@ -140,7 +140,7 @@ class InputRequest(ExceptionResource):
     ref = references.commit(self)
     def _exception_override(exception_ref: references.Ref[ExceptionResource]):
       if exception_ref == ref:
-        return value
+        return references.commit(value)
       return None
     return await invocation.replay_async(
       exception_override=_exception_override, strict=strict)
@@ -228,7 +228,8 @@ class Response(Generic[I_contra, O_co], resources.Resource):
 
 
 # A function that may override some exceptions that occur during invocation.
-ExceptionOverride = Callable[[references.Ref[ExceptionResource]], Any]
+ExceptionOverride = Callable[[references.Ref[ExceptionResource]],
+                             Optional[references.Ref]]
 
 
 
@@ -382,7 +383,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       # pylint: disable=protected-access
       replayed_output, child_ctx = context._consume_replay(invokable, arg)
       if replayed_output is not None:
-        return replayed_output
+        return replayed_output()
       else:
         with child_ctx:
           return call(arg)
@@ -407,7 +408,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       # pylint: disable=protected-access
       replayed_output, child_ctx = context._consume_replay(invokable, arg)
       if replayed_output is not None:
-        return replayed_output
+        return replayed_output()
       else:
         with child_ctx:
           result = await call(arg)
@@ -418,8 +419,8 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
   def _consume_replay(
       self,
       invokable: '_InvokableBase[I_contra, O_co]',
-      input_resource: I_contra) -> Tuple[Optional[O_co],
-                                'ReplayContext[I_contra, O_co]']:
+      input_resource: I_contra) -> Tuple[Optional[references.Ref[O_co]],
+                                        'ReplayContext[I_contra, O_co]']:
     """Replay the invocation if possible and return a child context."""
     request = references.commit(Request(
       references.commit(invokable),
@@ -446,7 +447,7 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
     if replay_response.output:
       invokable.set_from(resource_registry.wrap(replay_response.invokable()))
       Builder.register_replayed_subinvocations(replay_children)
-      return replay_response.output(), ReplayContext(
+      return replay_response.output, ReplayContext(
         replay_children,
         self._exception_override,
         self._strict)
@@ -460,14 +461,14 @@ class ReplayContext(Generic[I_contra, O_co], contexts.Context):
       if override is not None:
         # Typecheck the override.
         output_type = invokable.get_output_type()
-        if output_type and not isinstance(override, output_type):
+        if output_type and not isinstance(override(), output_type):
           raise InvokableTypeError(
-            f'Exception override {override} is not of required type '
+            f'Exception override {override()} is not of required type '
             f'{invokable.get_input_type()}.')
         Builder.register_replayed_subinvocations(replay_children)
         # Set invokable from response.
         return (
-          cast(O_co, override),
+          cast(references.Ref[O_co], override),
           ReplayContext(replay_children,
                         self._exception_override,
                         self._strict))

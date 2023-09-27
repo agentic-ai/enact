@@ -38,11 +38,11 @@ FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
 
 class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
   """Base class for field value wrappers."""
-  wrapped: interfaces.FieldValue
+  value: interfaces.FieldValue
 
-  def __init__(self, wrapped: interfaces.FieldValue):
+  def __init__(self, value: interfaces.FieldValue):
     """Initializes a wrapped field value."""
-    self.wrapped = wrapped
+    self.value = value
 
   @classmethod
   def field_names(cls) -> Iterable[str]:
@@ -50,7 +50,7 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     return ('wrapped',)
 
   def field_values(self) -> Iterable[interfaces.FieldValue]:
-    return (self.wrapped,)
+    return (self.value,)
 
   @classmethod
   def from_fields(
@@ -65,7 +65,7 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
       raise RegistryError(
         f'Cannot set fields from {type(other)} to {type(self)}.')
     assert isinstance(other, FieldValueWrapper)
-    self.wrapped = other.deepcopy_resource().wrapped
+    self.wrapped = other.deepcopy_resource().value
 
   @classmethod
   def wrap(cls: Type[FieldValueWrapperT],
@@ -77,8 +77,8 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
 
   def unwrap(self) -> WrappedT:
     """Unwrap a value directly."""
-    assert isinstance(self.wrapped, self.wrapped_type())
-    return from_field_value(self.wrapped)
+    assert isinstance(self.value, self.wrapped_type())
+    return from_field_value(self.value)
 
 
 class NoneWrapper(interfaces.ResourceWrapperBase):
