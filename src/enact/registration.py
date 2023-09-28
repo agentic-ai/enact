@@ -39,7 +39,8 @@ def _to_python_type(t) -> Optional[Type]:
   if isinstance(t, type):
     return t
   if hasattr(t, '__origin__'):  # Handle generics
-    return t.__origin__
+    if isinstance(t.__origin__, type):
+      return t.__origin__
   return None
 
 
