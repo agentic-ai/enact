@@ -73,6 +73,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   def __init__(self, digest: str, value: Optional[R]=None):
     """Initializes the reference from a digest and optionally the resource."""
+    assert isinstance(digest, str), (
+      'Must instantiate Ref with a string digest.')
     self._digest = digest
     self._cached: Optional[R] = value
 
