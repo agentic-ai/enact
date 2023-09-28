@@ -94,6 +94,11 @@ class RefTest(unittest.TestCase):
     ref2 = ref.from_id(ref.id)
     self.assertEqual(ref, ref2)
 
+  def test_ref_non_string_digest(self):
+    """Test that references cannot be constructed from a non-string digest."""
+    with self.assertRaisesRegex(AssertionError, 'string digest'):
+      _ = enact.Ref(1234)  # type: ignore
+
   def test_ref_to_wrapped_type(self):
     """Tests references to wrapped python types."""
     value = 1
