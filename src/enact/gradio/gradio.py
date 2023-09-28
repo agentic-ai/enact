@@ -340,12 +340,12 @@ class GUI:
         input required exception.
     """
     self._invokable = invokable
-    self._input_required_inputs = input_required_inputs or [
-      str, type(None), int, float, bool, PIL.Image.Image
-    ]
-    self._input_required_outputs = input_required_outputs or [
-      str, type(None), int, float, bool, PIL.Image.Image
-    ]
+    self._input_required_inputs = cast(List[Type], list({
+      str, type(None), int, float, bool, PIL.Image.Image}.union(
+        input_required_inputs or [])))
+    self._input_required_outputs = cast(List[Type], list({
+      str, type(None), int, float, bool, PIL.Image.Image}.union(
+        input_required_outputs or [])))
 
     input_type = self._invokable().get_input_type()
     if not input_type:
@@ -463,8 +463,10 @@ class GUI:
       with gr.Group():
         title = gr.Markdown(value=self._title(self._invokable))
         with gr.Accordion(label='Resource details', open=False):
+          pformat = pretty_print.pformat(
+            self._invokable(), skip_repeated_refs=True)
           invokable_details = gr.Markdown(
-            value=f'```{pretty_print.pformat(self._invokable())}```')
+            value=f'```{pformat}```')
 
       with gr.Group():
         gr.Markdown(value='Input:')
@@ -630,10 +632,12 @@ class GUI:
       def update_title(*args):
         response = get_invocation(*args).response
         assert response
+        pformat = pretty_print.pformat(response().invokable,
+                                       skip_repeated_refs=True)
         return (
           title.update(value=self._title(response().invokable)),
           invokable_details.update(
-            value=f'```{pretty_print.pformat(response().invokable)}```'))
+            value=f'```{pformat}```'))
 
       # Run the invokable on clicking Run.
       self.invocation_widget.set_from_event(
