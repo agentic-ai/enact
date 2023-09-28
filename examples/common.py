@@ -75,7 +75,8 @@ def kandinsky(prompt: str) -> PIL.Image.Image:
 
 
 def chat_gpt(messages: List[Tuple[str, str]],
-             model: str='gpt-3.5-turbo') -> str:
+             model: str='gpt-3.5-turbo',
+             **kwargs) -> str:
   """Calls ChatGPT given a conversation history.
   Args:
     messages: A list of pairs (role, message), where role can be one of
@@ -88,7 +89,8 @@ def chat_gpt(messages: List[Tuple[str, str]],
     'model': model,
     'messages': [
       {'role': role, 'content': content}
-      for role, content in messages]}
+      for role, content in messages],
+    **kwargs}
   r = requests.post(
     url=CHAT_GPT_URL,
     json=json_dict,
