@@ -14,6 +14,7 @@
 
 """Tests registration module."""
 
+from typing import Optional, Union
 import unittest
 
 import enact
@@ -54,6 +55,17 @@ class RegistrationTest(unittest.TestCase):
       def call(self, x):
         pass
 
+    self.assertEqual(MyInvokable.get_input_type(), None)
+    self.assertEqual(MyInvokable.get_output_type(), None)
+
+  def test_type_inference_union(self):
+    """Tests type inference fails for union and optional types."""
+    @enact.register
+    class MyInvokable(enact.Invokable):
+      """Invokable for testing."""
+
+      def call(self, x: Union[int, str]) -> Optional[str]:
+        pass
     self.assertEqual(MyInvokable.get_input_type(), None)
     self.assertEqual(MyInvokable.get_output_type(), None)
 

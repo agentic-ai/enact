@@ -40,8 +40,8 @@ class IntToStr(enact.Invokable):
 @enact.typed_invokable(int, str)
 class WrongOutputType(enact.Invokable):
 
-  def call(self, value: int) -> int:
-    return value
+  def call(self, value: int) -> str:
+    return value  # type: ignore
 
 
 @dataclasses.dataclass
@@ -108,7 +108,7 @@ class InvocationsTest(unittest.TestCase):
   def test_typecheck_output(self):
     fun = WrongOutputType()
     with self.assertRaises(TypeError):
-      fun('1')
+      fun(1)
 
   def test_auto_input_args(self):
     self.assertEqual(
