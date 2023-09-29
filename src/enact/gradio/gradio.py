@@ -34,6 +34,10 @@ W = TypeVar('W', bound='EnactWidget')
 C = TypeVar('C', bound=gr.components.Component)
 
 
+_DEFAULT_INPUT_REQUIRED_TYPES = [
+  str, type(None), int, float, bool, PIL.Image.Image]
+
+
 class EnactWidget(abc.ABC):
   """A UI widget that represents an enact value."""
 
@@ -327,24 +331,24 @@ class GUI:
       self,
       invokable: references.Ref[invocations.InvokableBase],
       input_required_inputs:
-        Optional[List[Type[Any]]]=None,
+        Optional[List[Type]]=None,
       input_required_outputs:
-        Optional[List[Type[Any]]]=None):
+        Optional[List[Type]]=None):
     """Create a new UI for the component.
 
     Args:
       invokable: The invokable resource to create a UI for.
       input_required_inputs: Input types of invokables that may raise an
         input required exception.
-      input_rquired_outputs: Output types of invokables that may raise an
+      input_required_outputs: Output types of invokables that may raise an
         input required exception.
     """
     self._invokable = invokable
-    self._input_required_inputs = cast(List[Type], list({
-      str, type(None), int, float, bool, PIL.Image.Image}.union(
+    self._input_required_inputs = cast(List[Type], list(set(
+      _DEFAULT_INPUT_REQUIRED_TYPES).union(
         input_required_inputs or [])))
-    self._input_required_outputs = cast(List[Type], list({
-      str, type(None), int, float, bool, PIL.Image.Image}.union(
+    self._input_required_outputs = cast(List[Type], list(set(
+      _DEFAULT_INPUT_REQUIRED_TYPES).union(
         input_required_outputs or [])))
 
     input_type = self._invokable().get_input_type()
