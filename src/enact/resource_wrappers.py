@@ -118,3 +118,9 @@ class PILImageWrapper(resources.ResourceWrapper):
     """Returns the wrapped resource."""
     bytes_io = io.BytesIO(self.value)
     return PIL.Image.open(bytes_io)
+
+  @classmethod
+  def set_wrapped_value(cls, target: PIL.Image.Image, src: PIL.Image.Image):
+    """Set a wrapped value target to correspond to source."""
+    target.resize(src.size)
+    target.paste(src, (0, 0))
