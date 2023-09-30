@@ -196,7 +196,7 @@ class InvocationHistory(RefWidget):
 
   def _create_digest_display(self, **kwargs) -> gr.components.Component:
     """Returns a component displaying the digest of the reference."""
-    return gr.Dropdown(show_label=False, **kwargs)
+    return gr.Dropdown(show_label=False, allow_custom_value=True, **kwargs)
 
   def _set_digest_display(self, value, **kwargs) -> gr.components.Component:
     """Returns a component displaying the digest of the reference."""
