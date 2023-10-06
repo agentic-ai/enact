@@ -160,7 +160,6 @@ def register(fun: C) -> C:
 
     wrapper = _Wrapper()
     def _wrapper_fun(unused_wrapped, instance, args, kwargs):
-      assert not instance
       call_args = CallArgs.from_python_args(*args, **kwargs)
       return wrapper(call_args)
     function_wrapper = FunctionWrapper(
