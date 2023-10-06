@@ -220,7 +220,7 @@ class ImageWidget(EnactWidget):
           value: Optional[Any]=None,
           **kwargs) -> List[Dict[str, Any]]:
     """Set content and properties of UI elements to resource."""
-    assert isinstance(value, PIL.Image.Image)
+    assert not value or  isinstance(value, PIL.Image.Image)
     if value:
       return [self._image.update(value=value, **kwargs)]
     else:
