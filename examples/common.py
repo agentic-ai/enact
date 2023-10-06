@@ -60,18 +60,44 @@ KANDINSKY_REPLICATE_VERSION = (
   'ea1addaab376f4dc227f5368bbd8eff901820fd1cc14ed8cad63b29249e9d463')
 
 
+SDXL_REPLICATE_VERSION = (
+  'stability-ai/sdxl:'
+  '8beff3369e81422112d93b89ca01426147de542cd4684c244b673b105188fe5f')
+
+
 class APIKeyNotFound(Exception):
   """The API key was not found."""
 
 
-def kandinsky(prompt: str) -> PIL.Image.Image:
+def kandinsky(prompt: str, **kwargs) -> PIL.Image.Image:
+  """Call the kandinsky text-to-image model using replicate's API."""
+  return replicate_text2image(prompt, KANDINSKY_REPLICATE_VERSION, **kwargs)
+
+
+def sdxl(
+    prompt: str,
+    refine: str='expert_ensemble_refiner',
+    **kwargs) -> PIL.Image.Image:
+  """Call the SDXL text-to-image model using replicate's API."""
+  return replicate_text2image(
+    prompt, SDXL_REPLICATE_VERSION,
+    refine=refine,
+    **kwargs)
+
+
+def replicate_text2image(
+    prompt: str,
+    model_version: str,
+    **kwargs) -> PIL.Image.Image:
   """Call the kandinsky text-to-image model using replicate's API."""
   os.environ['REPLICATE_API_TOKEN'] = REPLICATE_API_KEY.get()
   output = replicate.run(
-    KANDINSKY_REPLICATE_VERSION,
-    input={'prompt': prompt})
+    model_version,
+    input={'prompt': prompt, **kwargs})
   return PIL.Image.open(
       io.BytesIO(requests.get(output[0]).content))
+
+
 
 
 def chat_gpt(messages: List[Tuple[str, str]],
