@@ -1,10 +1,12 @@
 [project]
 name = "enact"
-version = "0.4.0.dev13"
+version = "0.4.0.dev16"
 dependencies = [
   "gradio",
+  "fastapi",
   "numpy",
   "Pillow",
+  "wrapt",
 ]
 description = "A framework for generative software."
 readme = "README.md"
@@ -15,6 +17,13 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.setuptools.package-data]
+"enact" = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
