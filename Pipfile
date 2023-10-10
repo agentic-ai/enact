@@ -15,6 +15,7 @@ numpy = "*"
 ipykernel = "*"
 types-Pillow = "*"
 fastapi = "*"
+wrapt = "*"
 
 [requires]
 python_version = "3.8"
