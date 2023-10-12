@@ -15,6 +15,7 @@
 """Wrappers for python callables."""
 
 import abc
+import asyncio
 import inspect
 from typing import (
   Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type, TypeVar,
@@ -130,6 +131,10 @@ def _is_instance_or_class_method(fun: Callable) -> bool:
 
 def register(fun: C) -> C:
   """Decorator for registering a wrapped function."""
+  if asyncio.iscoroutinefunction(fun):
+    raise TypeError(
+      'Cannot register an async function. '
+      'Please use an enact.AsyncInvokable instead.')
   if _is_instance_or_class_method(fun):
     class _MemberWrapper(MemberCallableWrapper):
       """Member or class wrapper."""
