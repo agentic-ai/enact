@@ -261,6 +261,13 @@ class FunctionWrappersTest(unittest.TestCase):
         def foo(cls, x: int):
           return str(x)
 
+  def test_register_async_function_fails(self):
+    """Tests that async functions can't be tracked (for now)."""
+    with self.assertRaisesRegex(TypeError, 'async'):
+      @enact.register
+      async def foo(x: int) -> str:
+        return str(x)
+
   def test_callable_argument(self):
     """Tests that registered functions can be arguments to other functions."""
     bar_suffix = 'bla'
