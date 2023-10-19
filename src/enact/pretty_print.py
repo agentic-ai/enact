@@ -178,10 +178,11 @@ def invocation_summary(invocation: invocations.Invocation, indent: int=0):
   invokable = f'->{invocation.request().invokable()}'
   input_value = invocation.get_input()
   if isinstance(input_value, function_wrappers.CallArgs):
-    args = (
-      [str(a) for a in input_value.args] +
-      [f'{k}={str(v)}' for k, v in input_value.kwargs.items()])
-    all_args = ', '.join(args)
+    args, kwargs = input_value.to_python_args()
+    str_args = (
+      [str(a) for a in args] +
+      [f'{k}={str(v)}' for k, v in kwargs.items()])
+    all_args = ', '.join(str_args)
   else:
     all_args = str(input_value)
   if invocation.successful():
