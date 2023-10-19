@@ -44,7 +44,7 @@ from enact.invocations import RequestInput
 from enact.invocations import request_input
 from enact.invocations import typed_invokable
 from enact.invocations import InvokableBase
-from enact.invocations import WrappedException
+from enact.invocations import NativeException
 
 from enact.invocation_generators import InvocationGenerator
 

@@ -224,7 +224,7 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke(store.commit(5))
       self.assertIsInstance(
         invocation.get_raised(),
-        enact.WrappedException)
+        enact.NativeException)
 
   def test_raise_native_error(self):
     """Tests that exceptions are raised in native format."""
