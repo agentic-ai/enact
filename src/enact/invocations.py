@@ -62,7 +62,7 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 
 
 @resource_registry.register
-class WrappedException(ExceptionResource):
+class NativeException(ExceptionResource):
   """A python exception wrapped as a resource."""
 
 # Input value type.
@@ -576,7 +576,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
   def _wrap_exception(self, exception: Exception) -> ExceptionResource:
     """Wraps an exception if necessary."""
     if not isinstance(exception, ExceptionResource):
-      return WrappedException(traceback.format_exc())
+      return NativeException(traceback.format_exc())
     return exception
 
   def _create_invocation(
