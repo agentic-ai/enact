@@ -118,6 +118,16 @@ class InvocationsTest(unittest.TestCase):
     self.assertEqual(
       IntToStr()(1), '1')
 
+  def test_native_exception_str(self):
+    """Tests native exceptions string representation."""
+    type_name = 'ValueError'
+    str_representation = 'Bad thing happened.'
+    traceback = 'foo: 23'
+    exception = enact.NativeException(
+      type_name, str_representation, traceback)
+    self.assertEqual(
+      str(exception), 'ValueError: Bad thing happened.')
+
   def test_invoke_simple(self):
     with self.store:
       fun = IntToStr('salt')

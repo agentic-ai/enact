@@ -17,7 +17,7 @@
 import contextlib
 import dataclasses
 import inspect
-import traceback
+import traceback as traceback_module
 from typing import (
   Any, Callable, Generic, Iterable, List, Mapping, Optional, Tuple, Type,
   TypeVar, cast)
@@ -64,6 +64,16 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 @resource_registry.register
 class NativeException(ExceptionResource):
   """A python exception wrapped as a resource."""
+
+  def __init__(self, type_name: str, str_representation: str, traceback: str):
+    self._type_name = type_name
+    self._str_representation = str_representation
+    self._traceback = traceback
+    super().__init__(traceback)
+
+  def __str__(self) -> str:
+    return f'{self._type_name}: {self._str_representation}'
+
 
 # Input value type.
 I_contra = TypeVar('I_contra', contravariant=True)
@@ -576,7 +586,10 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
   def _wrap_exception(self, exception: Exception) -> ExceptionResource:
     """Wraps an exception if necessary."""
     if not isinstance(exception, ExceptionResource):
-      return NativeException(traceback.format_exc())
+      return NativeException(
+        type_name=type(exception).__name__,
+        str_representation=str(exception),
+        traceback=traceback_module.format_exc())
     return exception
 
   def _create_invocation(
