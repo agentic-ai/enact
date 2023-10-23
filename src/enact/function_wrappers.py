@@ -224,6 +224,7 @@ def invoke(
     exception_override: invocations.ExceptionOverride=lambda _: None,
     raise_on_errors: Tuple[Type[Exception], ...]=(
       invocations.InvocationError, interfaces.FrameworkError),
+    wrap_exceptions: bool=False,
     strict: bool=True,
     commit: bool=True):
   """Invoke an invokable, wrapped function or python callable.
@@ -236,6 +237,9 @@ def invoke(
     exception_override: A function that takes an exception and returns either
       None or a resource to override the exception with.
     raise_on_errors: Which errors should raise beyond the invocation.
+    wrap_exceptions: Whether to wrap non-resource exceptions in NativeException.
+      If False, non-resource exceptions raised during invocation will be
+      re-raised.
     strict: If replaying, whether to replay strictly (expecting the same calls).
     commit: Whether to commit the invocation after invoking.
   """
@@ -280,5 +284,6 @@ def invoke(
     replay_from=replay_from,
     exception_override=exception_override,
     raise_on_errors=raise_on_errors,
+    wrap_exceptions=wrap_exceptions,
     strict=strict,
     commit=commit)

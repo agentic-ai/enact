@@ -65,14 +65,24 @@ class ExceptionResource(interfaces.ResourceBase, Exception):
 class NativeException(ExceptionResource):
   """A python exception wrapped as a resource."""
 
-  def __init__(self, type_name: str, str_representation: str, traceback: str):
-    self._type_name = type_name
-    self._str_representation = str_representation
-    self._traceback = traceback
-    super().__init__(traceback)
+  def __init__(
+      self, type_name: str, str_representation: str, traceback: str):
+    super().__init__(type_name, str_representation, traceback)
+
+  @property
+  def type_name(self) -> str:
+    return self.args[0]
+
+  @property
+  def str_representation(self) -> str:
+    return self.args[1]
+
+  @property
+  def traceback(self) -> str:
+    return self.args[2]
 
   def __str__(self) -> str:
-    return f'{self._type_name}: {self._str_representation}'
+    return f'{self.type_name}: {self.str_representation}'
 
 
 # Input value type.
@@ -517,6 +527,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
     if self._parent:
       self._parent.register_child(self)
     self.exception_raised: Optional[Exception] = None
+    self.exception_wrapped: bool = False
 
   @property
   def completed(self) -> bool:
@@ -586,6 +597,7 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
   def _wrap_exception(self, exception: Exception) -> ExceptionResource:
     """Wraps an exception if necessary."""
     if not isinstance(exception, ExceptionResource):
+      self.exception_wrapped = True
       return NativeException(
         type_name=type(exception).__name__,
         str_representation=str(exception),
@@ -750,6 +762,7 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       exception_override: ExceptionOverride=lambda _: None,
       raise_on_errors: Tuple[Type[Exception], ...]=(
         InvocationError, interfaces.FrameworkError),
+      wrap_exceptions: bool=False,
       strict: bool=True,
       commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
@@ -760,6 +773,9 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       exception_override: If replaying, an optional override for replayed
         exceptions.
       raise_on_errors: Which errors should raise beyond the invocation.
+      wrap_exceptions: Whether to wrap non-resource exceptions in
+        NativeException. If False, non-resource exceptions raised during
+        invocation will be re-raised.
       strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
       commit: Whether to commit the new invocation object.
@@ -775,7 +791,9 @@ class InvokableBase(_InvokableBase[I_contra, O_co]):
       except raise_on_errors:
         raise
       except Exception:  # pylint: disable=broad-exception-caught
-        if not builder.completed:
+        should_raise_wrapped_error = (
+          builder.exception_wrapped and not wrap_exceptions)
+        if not builder.completed or should_raise_wrapped_error:
           raise
       invocation = builder.invocation
     if commit:
@@ -813,6 +831,7 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       exception_override: ExceptionOverride=lambda _: None,
       raise_on_errors: Tuple[Type[Exception], ...]=(
         InvocationError, interfaces.FrameworkError),
+      wrap_exceptions: bool=False,
       strict: bool=True,
       commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
@@ -823,6 +842,9 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       exception_override: If replaying, an optional override for replayed
         exceptions.
       raise_on_errors: Which errors should raise beyond the invocation.
+      wrap_exceptions: Whether to wrap non-resource exceptions in
+        NativeException. If False, non-resource exceptions raised during
+        invocation will be re-raised.
       strict: Whether replay should fail if the replayed invocation
         does not match the current invocation.
       commit: Whether to commit the new invocation object.
@@ -838,7 +860,9 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       except raise_on_errors:
         raise
       except Exception:  # pylint: disable=broad-exception-caught
-        if not builder.completed:
+        should_raise_wrapped_error = (
+          builder.exception_wrapped and not wrap_exceptions)
+        if not builder.completed or should_raise_wrapped_error:
           raise
       invocation = builder.invocation
     if commit:
