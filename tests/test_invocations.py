@@ -26,6 +26,9 @@ from unittest import mock
 import enact
 from enact import invocations
 
+class ValueErrorResource(invocations.ExceptionResource):
+  """A value error that is also a resource."""
+
 
 @enact.typed_invokable(int, str)
 @dataclasses.dataclass
@@ -50,14 +53,14 @@ class AddOne(enact.Invokable):
   fail: bool = False
   def call(self, input_resource: int) -> int:
     if self.fail:
-      raise ValueError('fail')
+      raise ValueErrorResource('fail')
     return input_resource + 1
 
 
 @dataclasses.dataclass
 class Fail(enact.Invokable):
   def call(self, arg: enact.ResourceBase) -> int:
-    raise ValueError('fail')
+    raise ValueErrorResource('fail')
 
 
 @enact.typed_invokable(int, int)
@@ -128,6 +131,25 @@ class InvocationsTest(unittest.TestCase):
     self.assertEqual(
       str(exception), 'ValueError: Bad thing happened.')
 
+  def test_native_exception_references(self):
+    """Tests native exception commit/checkout."""
+    type_name = 'ValueError'
+    str_representation = 'Bad thing happened.'
+    traceback = 'foo: 23'
+    exception = enact.NativeException(
+      type_name, str_representation, traceback)
+    with self.store:
+      ref = self.store.commit(exception)
+      # pylint: disable=protected-access
+      ref._clear_cache()
+      checked_out = ref.checkout()
+      self.assertEqual(
+        checked_out.type_name, type_name)
+      self.assertEqual(
+        checked_out.str_representation, str_representation)
+      self.assertEqual(
+        checked_out.traceback, traceback)
+
   def test_invoke_simple(self):
     with self.store:
       fun = IntToStr('salt')
@@ -168,7 +190,7 @@ class InvocationsTest(unittest.TestCase):
   def test_invoke_fail(self):
     with self.store:
       invocation = NestedFunction(fail_on=3).invoke(
-        enact.commit(1))
+        enact.commit(1), wrap_exceptions=True)
       self.assertFalse(invocation.successful())
       exception = invocation.get_raised()
       self.assertIsInstance(
@@ -225,29 +247,31 @@ class InvocationsTest(unittest.TestCase):
         len(list(invocation.get_children())), 10)
 
   def test_wrapped_resource(self):
-    """Tests that exceptions are tracked as wrapped."""
+    """Tests that exceptions are tracked as wrapped when enabled."""
     class PythonErrorOnInvoke(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
     with self.store as store:
       fun = PythonErrorOnInvoke()
-      invocation = fun.invoke(store.commit(5))
-      self.assertIsInstance(
-        invocation.get_raised(),
-        enact.NativeException)
+      # Test with exception wrapping enabled.
+      invocation = fun.invoke(store.commit(5), wrap_exceptions=True)
+      self.assertIsInstance(invocation.get_raised(), enact.NativeException)
+      # Test with exception wrapping disabled.
+      with self.assertRaisesRegex(ValueError, 'foo'):
+        _ = fun.invoke(store.commit(5), wrap_exceptions=False)
 
   def test_raise_native_error(self):
     """Tests that exceptions are raised in native format."""
     class PythonErrorOnInvoke(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
-        raise ValueError('foo')
+        raise ValueErrorResource('foo')
     class ExpectValueError(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
         try:
           PythonErrorOnInvoke()(3)
-        except ValueError:
+        except ValueErrorResource:
           return 'Got value error'
-        raise enact.ExceptionResource('Expected ValueError')
+        raise enact.ExceptionResource('Expected ValueErrorResource')
 
     with self.store as store:
       fun = ExpectValueError()
@@ -260,7 +284,7 @@ class InvocationsTest(unittest.TestCase):
     """Tests that the raised_here field is set correctly."""
     class PythonErrorOnInvoke(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
-        raise ValueError('foo')
+        raise ValueErrorResource('foo')
 
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
@@ -287,7 +311,7 @@ class InvocationsTest(unittest.TestCase):
       def call(self, unused_input: enact.ResourceBase):
         nonlocal native_errors_raised
         native_errors_raised += 1
-        raise ValueError('foo')
+        raise ValueErrorResource('foo')
 
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
@@ -301,7 +325,7 @@ class InvocationsTest(unittest.TestCase):
       subcall_2 = SubCall(store.commit(subcall_1))
       invocation = subcall_2.invoke(store.commit(5))
       self.assertEqual(native_errors_raised, 1)
-      with self.assertRaises(ValueError):
+      with self.assertRaises(ValueErrorResource):
         with invocations.ReplayContext(subinvocations=[
             enact.commit(invocation)]):
           subcall_2(5)
@@ -437,7 +461,7 @@ class InvocationsTest(unittest.TestCase):
       with enact.ReplayContext(
           subinvocations=[enact.commit(invocation)],
           exception_override=lambda x: enact.commit(100), strict=False):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueErrorResource):
           # Exception override is not active since we're ignoring the
           # replay.
           fun(1)
@@ -586,7 +610,7 @@ class AsyncRollConcurrentDice(enact.AsyncInvokable):
 class AsyncFail(enact.AsyncInvokable):
   async def call(self):
     await asyncio.sleep(0.01)
-    raise ValueError('AsyncFail')
+    raise ValueErrorResource('AsyncFail')
 
 
 @enact.typed_invokable(type(None), list)
@@ -685,6 +709,21 @@ class AsyncInvocationsTest(unittest.TestCase):
       replay = asyncio.run(invocation.replay_async())
       self.assertEqual(invocation, replay)
 
+  def test_wrapped_resource_async(self):
+    """Tests that exceptions are tracked as wrapped when enabled."""
+    class PythonErrorOnInvoke(enact.AsyncInvokable):
+      async def call(self, unused_input: enact.ResourceBase):
+        raise ValueError('foo')
+    with self.store as store:
+      fun = PythonErrorOnInvoke()
+      # Test with exception wrapping enabled.
+      invocation = asyncio.run(
+        fun.invoke(store.commit(5), wrap_exceptions=True))
+      self.assertIsInstance(invocation.get_raised(), enact.NativeException)
+      # Test with exception wrapping disabled.
+      with self.assertRaisesRegex(ValueError, 'foo'):
+        _ = asyncio.run(fun.invoke(store.commit(5), wrap_exceptions=False))
+
   def test_replay_async(self):
     """Tests async replays."""
     fun = AsyncRollConcurrentDice()
@@ -718,7 +757,8 @@ class AsyncInvocationsTest(unittest.TestCase):
     """Tests async replays that collect multiple exceptions."""
     fun = Gather([AsyncFail() for _ in range(10)])
     with self.store:
-      invocation = asyncio.run(fun.invoke())
+      invocation_cor = fun.invoke()
+      invocation = asyncio.run(invocation_cor)
       exceptions = [c.get_raised() for c in invocation.get_children()]
       self.assertEqual(len(exceptions), 10)
 
