@@ -92,7 +92,7 @@ class ResourceTest(unittest.TestCase):
 
     @enact.register
     @dataclasses.dataclass
-    class CustomWrapper(enact.ResourceWrapper[Custom]):
+    class CustomWrapper(enact.TypeWrapper[Custom]):
       """A wrapper for Custom."""
       x: int
       @classmethod

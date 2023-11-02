@@ -90,7 +90,7 @@ class Resource(_Resource):
           self_field.set_from(target)
           continue
         else:
-          wrapper_type = resource_registry.Registry.get().get_wrapper_type(
+          wrapper_type = resource_registry.Registry.get().get_type_wrapper(
             type(self_field))
           if wrapper_type and not wrapper_type.is_immutable():
             wrapper_type.set_wrapped_value(self_field, target)
@@ -116,17 +116,17 @@ class ImmutableResource(_Resource):
 
 
 WrappedT = TypeVar('WrappedT')
-WrapperT = TypeVar('WrapperT', bound='ResourceWrapper')
+WrapperT = TypeVar('WrapperT', bound='TypeWrapper')
 
 
 @dataclasses.dataclass
-class ResourceWrapper(interfaces.ResourceWrapperBase[WrappedT], Resource):
-  """Base class for dataclass-based resource wrappers."""
+class TypeWrapper(interfaces.TypeWrapperBase[WrappedT], Resource):
+  """Base class for dataclass-based type wrappers."""
 
   @classmethod
   @abc.abstractmethod
   def wrapped_type(cls) -> Type[WrappedT]:
-    """Returns the type of the wrapped value."""
+    """Returns the type wrapped by this TypeWrapper."""
     raise NotImplementedError()
 
   @classmethod

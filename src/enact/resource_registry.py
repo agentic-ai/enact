@@ -14,14 +14,17 @@
 
 """Type registration functionality to allow deserialization of resources."""
 
+import inspect
+from types import MethodType
+import types
 from typing import (
-  Any, Dict, Hashable, Iterable, Mapping, Optional, Set, Type, TypeVar, cast)
+  Any, Callable, Dict, Hashable, Iterable, Mapping, Optional, Set,
+  Type, TypeVar, Union, cast)
 
-from enact import interfaces, resources
-
+from enact import interfaces
 
 WrappedT = TypeVar('WrappedT')
-WrapperT = TypeVar('WrapperT', bound=interfaces.ResourceWrapperBase)
+WrapperT = TypeVar('WrapperT', bound=interfaces.TypeWrapperBase)
 
 
 class RegistryError(Exception):
@@ -36,7 +39,7 @@ class ResourceNotFound(RegistryError):
 FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
 
 
-class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
+class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
   """Base class for field value wrappers."""
   value: interfaces.FieldValue
 
@@ -81,7 +84,8 @@ class FieldValueWrapper(interfaces.ResourceWrapperBase[WrappedT]):
     return from_field_value(self.value)
 
 
-class NoneWrapper(interfaces.ResourceWrapperBase):
+class NoneWrapper(
+  interfaces.TypeWrapperBase):
   """Wrapper for None."""
   @classmethod
   def wrapped_type(cls) -> Type[None]:
@@ -186,6 +190,82 @@ class DictWrapper(FieldValueWrapper[dict]):
     target.update(src)
 
 
+FunctionWrapperT = TypeVar('FunctionWrapperT', bound='FunctionWrapper')
+MethodWrapperT = TypeVar('MethodWrapperT', bound='MethodWrapper')
+
+
+class FunctionWrapper(interfaces.ResourceBase):
+  """Base class for function wrappers.
+
+  Should be subclassed as an Invokable or AsyncInvokable.
+
+  Function wrapping require a three step approach:
+  1) The native function is transparently wrapped using a python wrapper
+     function.
+  2) The wrapper function routes calls into an invokable resource, so that
+     inputs are tracked.
+  3) The invokable calls the native function that is being wrapped.
+
+  The native function that is being wrapped is exposed as wrapped_function.
+  The python wrapper function that calls into the invokable is exposed as
+  wrapper function.
+  """
+  @classmethod
+  def wrapper_function(cls) -> Callable:
+    """The python function that routes calls into this invokable."""
+    raise NotImplementedError()
+
+  @classmethod
+  def wrapped_function(cls) -> Callable:
+    """The python function that is being called by this invokable."""
+    raise NotImplementedError()
+
+  @classmethod
+  def wrap(cls: Type[FunctionWrapperT], c: Callable) -> Union[
+      'FunctionWrapper', 'MethodWrapper']:
+    """Wrap a function."""
+    if inspect.ismethod(c):
+      return cls.method_wrapper().wrap(c)
+    assert c == cls.wrapper_function(), (
+      f'Wrong wrapper class for callable: {cls} vs {c}')
+    return cls()
+
+  @classmethod
+  def method_wrapper(cls) -> 'Type[MethodWrapper]':
+    """The associated method wrapper."""
+    raise NotImplementedError()
+
+
+class MethodWrapper(interfaces.ResourceBase):
+  """Base class for method wrappers."""
+
+  @classmethod
+  def wrap(cls: Type[MethodWrapperT], m: MethodType) -> MethodWrapperT:
+    """Wrap a method."""
+    assert inspect.ismethod(m), 'Expected method.'
+    assert m.__self__, 'Expected __self__ attribute on bound method.'
+    assert m.__func__ == cls.wrapper_function(), (
+      'Expected method to be based on the same function as its '
+      'function wrapper.')
+    # pylint: disable=too-many-function-args
+    return cls(m.__self__) # type: ignore
+
+  @classmethod
+  def wrapper_function(cls) -> Callable:
+    """The python function that routes calls into this invokable."""
+    raise NotImplementedError()
+
+  @classmethod
+  def wrapped_function(cls) -> Callable:
+    """The python function that is being called by this invokable."""
+    raise NotImplementedError()
+
+  def get_instance(self):
+    """Added to interface to simplify typing."""
+    return self.instance  # type: ignore
+
+
+
 class MissingWrapperError(interfaces.FieldTypeError):
   """Raised when a required wrapper is missing."""
 
@@ -201,11 +281,11 @@ class Registry:
     # Map from type id to resource type.
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
     # Map from python types to wrapper types.
-    self._wrapped_types: Dict[Type, Type[interfaces.ResourceWrapperBase]] = {}
-    self._wrapper_types: Set[Type[interfaces.ResourceWrapperBase]] = set()
-    # Map from python instances to instance wrapper resources.
-    self._wrapped_instances: Dict[Hashable, resources.ImmutableResource] = {}
-    self._instance_wrappers: Dict[resources.ImmutableResource, Hashable] = {}
+    self._wrapped_types: Dict[Type, Type[interfaces.TypeWrapperBase]] = {}
+    self._wrapper_types: Set[Type[interfaces.TypeWrapperBase]] = set()
+    self._function_wrappers: Dict[Callable, Type[FunctionWrapper]] = {}
+
+    # Register basic wrappers for field values.
     self.register(NoneWrapper)
     self.register(IntWrapper)
     self.register(FloatWrapper)
@@ -231,8 +311,10 @@ class Registry:
         f'registered to a different type: '
         f'{self._type_map[type_id]}\n')
     self._type_map[type_id] = resource
-    if issubclass(resource, interfaces.ResourceWrapperBase):
+    if issubclass(resource, interfaces.TypeWrapperBase):
       self._register_resource_wrapper(resource)
+    if issubclass(resource, FunctionWrapper):
+      return self._register_function_wrapper(resource)
 
   def lookup(self, type_id: str) -> Type[interfaces.ResourceBase]:
     """Looks up a resource type by name."""
@@ -241,39 +323,23 @@ class Registry:
       raise ResourceNotFound(f'No type registered for {type_id}')
     return resource_class
 
-  def register_instance_wrapper(
-      self, instance: Hashable, wrapper: resources.ImmutableResource):
-    """Register a wrapper type for a hashable instance.
-
-    This is useful for registering functions to their wrappers.
-
-    Args:
-      instance: An instance. Must be hashable.
-      wrapper: An immutable wrapper instance.
-    """
-    if isinstance(instance, interfaces.ResourceBase):
-      raise TypeError('Cannot wrap a resource instance.')
-    if isinstance(instance, type):
-      raise TypeError(
-        'Cannot wrap a type instance. Use a ResourceWrapper instead.')
-    if not wrapper.type_id() in self._type_map:
-      raise RegistryError(
-        f'Instance wrapper type {type(wrapper)} is not registered.')
-    self._instance_wrappers[wrapper] = instance
-    self._wrapped_instances[instance] = wrapper
+  def _register_function_wrapper(self, wrapper_type: Type[FunctionWrapper]):
+    """Register a function wrapper type."""
+    self._function_wrappers[
+        wrapper_type.wrapper_function()] = wrapper_type
 
   def _register_resource_wrapper(self, wrapper_type: Type[WrapperT]):
     """Register a new wrapper type."""
     self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
     self._wrapper_types.add(wrapper_type)
 
-  def get_wrapper_type(self, t: Type[WrappedT]) -> Optional[
-      Type[interfaces.ResourceWrapperBase[WrappedT]]]:
+  def get_type_wrapper(self, t: Type[WrappedT]) -> Optional[
+      Type[interfaces.TypeWrapperBase[WrappedT]]]:
     """Return a matching wrapper type if present."""
     wrapper = self._wrapped_types.get(t)
     if wrapper:
-      return cast(Type[interfaces.ResourceWrapperBase[WrappedT]], wrapper)
-    found: Optional[Type[interfaces.ResourceWrapperBase]] = None
+      return cast(Type[interfaces.TypeWrapperBase[WrappedT]], wrapper)
+    found: Optional[Type[interfaces.TypeWrapperBase]] = None
     for k, v in self._wrapped_types.items():
       if issubclass(t, k):
         if found:
@@ -282,20 +348,32 @@ class Registry:
         found = v
     return found
 
+  def _get_function_wrapper_type(self, c: Callable) -> Type[FunctionWrapper]:
+    """Return the function wrapper for c or raise an error."""
+    func = c
+    if inspect.ismethod(c):
+      func = c.__func__
+    if not isinstance(func, Hashable):
+      raise interfaces.FieldTypeError(
+        'Only immutable callables (e.g. python functions) can be handled '
+        'using enact. If you need use callable python classes that are '
+        'mutable, consider subclassing from Invokable or AsyncInvokable.')
+    function_wrapper_type = self._function_wrappers.get(func)
+    if not function_wrapper_type:
+      raise MissingWrapperError(
+        f'Cannot find wrapper for {func}. Did you register the '
+        f'function or method with the @enact.register decorator?')
+    return function_wrapper_type
+
   def wrap(self, value: Any) -> interfaces.ResourceBase:
     """Wrap a value if necessary."""
     if isinstance(value, interfaces.ResourceBase):
       return value
-    if isinstance(value, Hashable):
-      try:
-        instance_wrapper = self._wrapped_instances.get(value)
-      except TypeError:
-        instance_wrapper = None
-      if instance_wrapper:
-        return instance_wrapper
-    wrapper = self.get_wrapper_type(type(value))
-    if wrapper:
-      return wrapper.wrap(value)
+    type_wrapper_class = self.get_type_wrapper(type(value))
+    if type_wrapper_class:
+      return type_wrapper_class.wrap(value)
+    if callable(value):
+      return self._get_function_wrapper_type(value).wrap(value)
     raise MissingWrapperError(
       f'Cannot wrap value of type {type(value)}. Please register '
       f'a ResourceWrapper for this type.')
@@ -304,7 +382,7 @@ class Registry:
     """Wrap a type if necessary."""
     if issubclass(value, interfaces.ResourceBase):
       return value
-    wrapper = self.get_wrapper_type(value)
+    wrapper = self.get_type_wrapper(value)
     if wrapper:
       return wrapper
     raise MissingWrapperError(
@@ -313,16 +391,18 @@ class Registry:
 
   def unwrap(self, value: interfaces.ResourceBase) -> Any:
     """Unwrap a value if wrapped."""
-    if (isinstance(value, resources.ImmutableResource) and
-        value in self._instance_wrappers):
-      return self._instance_wrappers[value]
-    if isinstance(value, interfaces.ResourceWrapperBase):
+    if isinstance(value, interfaces.TypeWrapperBase):
       return value.unwrap()
+    if isinstance(value, FunctionWrapper):
+      return value.wrapper_function()
+    if isinstance(value, MethodWrapper):
+      return types.MethodType(
+        value.wrapper_function(), value.get_instance())
     return value
 
   def unwrap_type(self, value: Type[interfaces.ResourceBase]) -> Type:
     """Unwrap a type if wrapped."""
-    if issubclass(value, interfaces.ResourceWrapperBase):
+    if issubclass(value, interfaces.TypeWrapperBase):
       return value.wrapped_type()
     return value
 
@@ -341,12 +421,6 @@ def register(cls: Type[ResourceT]) -> Type[ResourceT]:
   """Decorator for resource classes."""
   Registry.get().register(cls)
   return cls
-
-
-def register_instance_wrapper(
-    instance: Hashable, wrapper: resources.ImmutableResource):
-  """Decorator for resource classes."""
-  Registry.get().register_instance_wrapper(instance, wrapper)
 
 
 def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
@@ -409,7 +483,7 @@ def from_field_value(value: interfaces.FieldValue) -> Any:
     return unwrap(value)
   if (
       isinstance(value, type) and
-      issubclass(value, interfaces.ResourceWrapperBase)):
+      issubclass(value, interfaces.TypeWrapperBase)):
     return unwrap_type(value)
   if isinstance(value, list):
     return [from_field_value(x) for x in value]

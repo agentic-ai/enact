@@ -27,7 +27,7 @@ from enact import registration
 
 @registration.register
 @dataclasses.dataclass
-class TupleWrapper(resources.ResourceWrapper[tuple]):
+class TupleWrapper(resources.TypeWrapper[tuple]):
   """Wrapper for tuples."""
   value: list
 
@@ -53,7 +53,7 @@ class TupleWrapper(resources.ResourceWrapper[tuple]):
 
 @registration.register
 @dataclasses.dataclass
-class SetWrapper(resources.ResourceWrapper[set]):
+class SetWrapper(resources.TypeWrapper[set]):
   """Wrapper for tuples."""
   value: list
 
@@ -75,7 +75,7 @@ class SetWrapper(resources.ResourceWrapper[set]):
 
 @registration.register
 @dataclasses.dataclass
-class NPArrayWrapper(resources.ResourceWrapper):
+class NPArrayWrapper(resources.TypeWrapper):
   """A resource wrapper for numpy arrays."""
   value: bytes
 
@@ -99,7 +99,7 @@ class NPArrayWrapper(resources.ResourceWrapper):
 NPFloatWrapperT = TypeVar('NPFloatWrapperT', bound='NPFloatWrapper')
 
 @dataclasses.dataclass
-class NPFloatWrapper(resources.ResourceWrapper):
+class NPFloatWrapper(resources.TypeWrapper):
   """Base class for resource wrappers for numpy float scalars."""
   value: float
 
@@ -139,7 +139,7 @@ class NPFloat64Wrapper(NPFloatWrapper):
 
 @registration.register
 @dataclasses.dataclass
-class PILImageWrapper(resources.ResourceWrapper):
+class PILImageWrapper(resources.TypeWrapper):
   """An resource wrapper for PIL images."""
   value: bytes
 
