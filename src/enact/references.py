@@ -78,6 +78,9 @@ class Ref(Generic[R], interfaces.ResourceBase):
     self._digest = digest
     self._cached: Optional[R] = value
 
+  def _clear_cache(self):
+    self._cached = None
+
   @property
   def digest(self) -> str:
     """Returns a unique, deterministic digest of the referenced resource."""
