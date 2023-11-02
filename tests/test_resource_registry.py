@@ -15,6 +15,7 @@
 """Tests for the resource_registry module."""
 
 import dataclasses
+import types
 from typing import Any, List, Tuple, Type
 import unittest
 
@@ -35,7 +36,7 @@ class CustomType:
 
 @enact.register
 @dataclasses.dataclass
-class CustomWrapper(enact.ResourceWrapper[CustomType]):
+class CustomWrapper(enact.TypeWrapper[CustomType]):
   """A simple resource for testing."""
   list_value: list
 
@@ -87,7 +88,7 @@ class RegistryTest(unittest.TestCase):
     for value, value_type in field_values:
       with self.subTest(str(value_type)):
         wrapped = enact.wrap(value)
-        assert isinstance(wrapped, enact.ResourceWrapperBase)
+        assert isinstance(wrapped, enact.TypeWrapperBase)
         self.assertEqual(enact.unwrap(wrapped), value)
 
   def test_wrap_noop_on_resources(self):
@@ -106,7 +107,7 @@ class RegistryTest(unittest.TestCase):
     """Tests that wrapping nests with custom types works."""
     py_dict = {'a': [CustomType((1, 2)), {'test': CustomType((2, 3))}]}
     wrapped = enact.wrap(py_dict)
-    assert isinstance(wrapped, enact.ResourceWrapperBase)
+    assert isinstance(wrapped, enact.TypeWrapperBase)
     self.assertEqual(enact.unwrap(wrapped), py_dict)
 
   def test_wrap_types(self):
@@ -120,29 +121,104 @@ class RegistryTest(unittest.TestCase):
     self.assertEqual(
       resource_registry.from_field_value(as_fields), type_nest)
 
-  def test_wrap_instance(self):
-    @dataclasses.dataclass(frozen=True)
-    class MyImmutable(enact.ImmutableResource):
-      """Immutable wrapper type."""
-      value: int
+  def test_wrap_function(self):
+    """Tests that wrapping functions works."""
+    def foo(x: int) -> int:
+      return x
 
-    @dataclasses.dataclass(frozen=True)
-    class MyCustomType:
-      """Custom type."""
-      value: int
+    def foo_wrapper(x: int) -> int:
+      return x
+
+    @dataclasses.dataclass
+    class MethodWrapper(resource_registry.MethodWrapper):
+      @classmethod
+      def wrapper_function(cls):
+        return foo_wrapper
+
+      @classmethod
+      def wrapped_function(cls):
+        return foo
+
+    @dataclasses.dataclass
+    class FunctionWrapper(resource_registry.FunctionWrapper):
+      """The FunctionWrapper that goes with MethodWrapper."""
+      @classmethod
+      def wrapper_function(cls):
+        return foo_wrapper
+
+      @classmethod
+      def wrapped_function(cls):
+        return foo
+
+      @classmethod
+      def method_wrapper(cls) -> Type[resource_registry.MethodWrapper]:
+        return MethodWrapper
 
     registry = enact.Registry()
-    registry.register(MyImmutable)
-    registry.register_instance_wrapper(
-      MyCustomType(3), MyImmutable(3))
-
+    registry.register(FunctionWrapper)
+    self.assertEqual(registry.wrap(foo_wrapper), FunctionWrapper())
     self.assertEqual(
-      registry.wrap(MyCustomType(3)),
-      MyImmutable(3))
+      registry.unwrap(registry.wrap(foo_wrapper)), foo_wrapper)
 
+  def test_wrap_method(self):
+    """Tests that wrapping methods works."""
+
+    @dataclasses.dataclass
+    class MyClass(enact.Resource):
+      y: int
+
+      def foo(self, x: int) -> int:
+        return x
+
+      def foo_wrapper(self, x: int) -> int:
+        return x
+
+    @dataclasses.dataclass
+    class MethodWrapper(resource_registry.MethodWrapper):
+      instance: Any
+
+      @classmethod
+      def wrapper_function(cls):
+        return MyClass.foo_wrapper
+
+      @classmethod
+      def wrapped_function(cls):
+        return MyClass.foo
+
+    @dataclasses.dataclass
+    class FunctionWrapper(resource_registry.FunctionWrapper):
+      """The FunctionWrapper that goes with MethodWrapper."""
+      @classmethod
+      def wrapper_function(cls):
+        return MyClass.foo_wrapper
+
+      @classmethod
+      def wrapped_function(cls):
+        return MyClass.foo
+
+      @classmethod
+      def method_wrapper(cls) -> Type[resource_registry.MethodWrapper]:
+        return MethodWrapper
+
+    registry = enact.Registry()
+    registry.register(MyClass)
+    registry.register(FunctionWrapper)
+
+    self.assertEqual(registry.wrap(MyClass.foo_wrapper), FunctionWrapper())
     self.assertEqual(
-      registry.unwrap(MyImmutable(3)),
-      MyCustomType(3))
+      registry.unwrap(registry.wrap(MyClass.foo_wrapper)), MyClass.foo_wrapper)
+
+    instance = MyClass(69)
+    wrapped_method = registry.wrap(instance.foo_wrapper)
+    self.assertEqual(wrapped_method, MethodWrapper(instance))
+    unwrapped_method = registry.unwrap(wrapped_method)
+    self.assertIsInstance(unwrapped_method, types.MethodType)
+    self.assertEqual(unwrapped_method.__self__, instance)
+    self.assertEqual(unwrapped_method.__func__, MyClass.foo_wrapper)
+
+    # Check that original instance and self are aliased.
+    instance.y = 420
+    self.assertEqual(unwrapped_method.__self__.y, 420)
 
   def test_deepcopy_primitives(self):
     """Tests that deep copying primitives works."""

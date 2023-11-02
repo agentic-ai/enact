@@ -17,8 +17,7 @@
 import abc
 import functools
 import json
-from typing import (
-  Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union)
+from typing import Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -210,11 +209,11 @@ class ResourceDict(Generic[C], Dict[str, ResourceDictValue]):
 
 
 WrappedT = TypeVar('WrappedT')
-WrapperT = TypeVar('WrapperT', bound='ResourceWrapperBase')
+WrapperT = TypeVar('WrapperT', bound='TypeWrapperBase')
 
 
-class ResourceWrapperBase(ResourceBase, Generic[WrappedT]):
-  """Interface for resource classes that wrap python classes."""
+class TypeWrapperBase(ResourceBase, Generic[WrappedT]):
+  """Interface for resource classes that wrap python classes"""
   @classmethod
   @abc.abstractmethod
   def wrapped_type(cls) -> Type[WrappedT]:
@@ -243,3 +242,4 @@ class ResourceWrapperBase(ResourceBase, Generic[WrappedT]):
     raise ImplementationMissing(
       f'Please implement set_wrapped_value for ResourceWrapper'
       f'{cls} to enable advanced features, e.g., replays.')
+

@@ -22,7 +22,7 @@ from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
 from enact.interfaces import ResourceBase
-from enact.interfaces import ResourceWrapperBase
+from enact.interfaces import TypeWrapperBase
 from enact.interfaces import ResourceDict
 
 from enact.invocations import _InvokableBase
@@ -66,7 +66,7 @@ from enact.references import FileStore
 
 from enact.resources import Resource
 from enact.resources import ImmutableResource
-from enact.resources import ResourceWrapper
+from enact.resources import TypeWrapper
 
 from enact.registration import register
 
