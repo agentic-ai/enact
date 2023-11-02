@@ -32,6 +32,9 @@ class TestResourceWrappers(unittest.TestCase):
     (resource_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
     (resource_wrappers.TupleWrapper, (1, 2, 3)),
     (resource_wrappers.SetWrapper, {1, 2, 3}),
+    (resource_wrappers.NPFloat16Wrapper, np.float16(1.0)),
+    (resource_wrappers.NPFloat32Wrapper, np.float32(1.0)),
+    (resource_wrappers.NPFloat64Wrapper, np.float64(1.0)),
   ]
 
   def setUp(self):
