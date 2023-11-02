@@ -16,7 +16,7 @@
 
 import dataclasses
 import io
-from typing import Type
+from typing import Type, TypeVar
 
 import numpy as np
 import PIL.Image
@@ -95,6 +95,47 @@ class NPArrayWrapper(resources.ResourceWrapper):
     """Returns the wrapped resource."""
     bytes_io = io.BytesIO(self.value)
     return np.load(bytes_io)
+
+NPFloatWrapperT = TypeVar('NPFloatWrapperT', bound='NPFloatWrapper')
+
+@dataclasses.dataclass
+class NPFloatWrapper(resources.ResourceWrapper):
+  """Base class for resource wrappers for numpy float scalars."""
+  value: float
+
+  @classmethod
+  def wrap(cls: Type[NPFloatWrapperT], value: np.float32) -> NPFloatWrapperT:
+    """Returns a wrapper for the resource."""
+    value = float(value)
+    return cls(value=value)
+
+  def unwrap(self) -> np.ndarray:
+    """Returns the wrapped resource."""
+    return self.wrapped_type()(self.value)
+
+
+@registration.register
+class NPFloat16Wrapper(NPFloatWrapper):
+  """Resource wrapper for numpy float16 scalars."""
+  @classmethod
+  def wrapped_type(cls) -> Type[np.float16]:
+    return np.float16
+
+
+@registration.register
+class NPFloat32Wrapper(NPFloatWrapper):
+  """Resource wrapper for numpy float32 scalars."""
+  @classmethod
+  def wrapped_type(cls) -> Type[np.float32]:
+    return np.float32
+
+
+@registration.register
+class NPFloat64Wrapper(NPFloatWrapper):
+  """Resource wrapper for numpy float64 scalars."""
+  @classmethod
+  def wrapped_type(cls) -> Type[np.float64]:
+    return np.float64
 
 
 @registration.register
