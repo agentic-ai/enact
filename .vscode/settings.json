@@ -8,20 +8,18 @@
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
-    "python.linting.enabled": true,
-    "python.linting.pylintArgs": [
-        "--indent-string=\"  \"",
-        "--rcfile=./pylintrc"
-    ],
-    "python.linting.mypyArgs": [
-        "--check-untyped-defs"
-    ],
-    "python.linting.mypyEnabled": true,
-    "python.linting.mypyCategorySeverity.note": "Error",
     "files.exclude": {
         "build/**": true
     },
     "pylint.args": [
-        "--rcfile=.vscode/pylintrc"
+        "--rcfile=.vscode/pylintrc",
+        "--indent-string=\"  \""
+    ],
+    "mypy-type-checker.args": [
+        "--check-untyped-defs"
+    ],
+    "mypy-type-checker.importStrategy": "fromEnvironment",
+    "mypy-type-checker.path": [
+        "[\"./venv/bin/mypy\"]"
     ],
 }
