@@ -398,3 +398,19 @@ class FunctionWrappersTest(unittest.TestCase):
     with self.store:
       invocation = enact.invoke(instance.fun, (3,))
       self.assertEqual(invocation.get_output(), 4)
+
+  def test_checkout_method(self):
+    """Test that we can commit and checkout methods."""
+    @enact.register
+    @dataclasses.dataclass
+    class MyClass(enact.Resource):
+      x: int
+
+      @enact.register
+      def foo(self) -> int:
+        return self.x
+
+    with self.store:
+      ref = enact.commit(MyClass(3).foo)
+      self.assertEqual(ref().__self__.x, 3)
+      self.assertEqual(ref()(), 3)
