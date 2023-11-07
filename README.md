@@ -166,7 +166,7 @@ MyResource(x=1, y=[2, 3])
 For existing types, it can be more convenient to wrap them rather than to
 redefine them as enact `Resource` objects.
 
-This can be accomplished by registering a `ResourceWrapper` subclass.
+This can be accomplished by registering a `TypeWrapper` subclass.
 
 ```python
 class Die:
@@ -180,7 +180,7 @@ class Die:
 
 @enact.register
 @dataclasses.dataclass
-class DieWrapper(enact.ResourceWrapper[Die]):
+class DieWrapper(enact.TypeWrapper[Die]):
   """Wrapper for Die."""
   sides: int
 

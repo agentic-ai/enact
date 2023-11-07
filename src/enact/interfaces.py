@@ -240,6 +240,6 @@ class TypeWrapperBase(ResourceBase, Generic[WrappedT]):
   def set_wrapped_value(cls, target: WrappedT, src: WrappedT):
     """Set a wrapped value target to correspond to source."""
     raise ImplementationMissing(
-      f'Please implement set_wrapped_value for ResourceWrapper'
+      f'Please implement set_wrapped_value for TypeWrapper'
       f'{cls} to enable advanced features, e.g., replays.')
 

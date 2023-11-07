@@ -83,7 +83,7 @@ def register(registerable: RegisterableT) -> RegisterableT:
     raise TypeError(
       f'Cannot register type {registerable}. '
        'Only types that inherit from Resource or Invokable can be registered. '
-       'Consider using a ResourceWrapper to register non-Resource types.')
+       'Consider using a TypeWrapper to register non-Resource types.')
   elif callable(registerable):
     return cast(RegisterableT, function_wrappers.register(registerable))
   else:
