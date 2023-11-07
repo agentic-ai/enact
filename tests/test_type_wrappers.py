@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the resource_wrappers module."""
+"""Tests for the type_wrappers module."""
 
 import unittest
 
@@ -21,20 +21,20 @@ import PIL.Image
 
 import enact
 
-from enact import resource_wrappers
+from enact import type_wrappers
 
 
-class TestResourceWrappers(unittest.TestCase):
+class TestTypeWrappers(unittest.TestCase):
   """Tests all the non-fieldvalue wrappers."""
 
   TYPES = [
-    (resource_wrappers.NPArrayWrapper, np.array([0.0, 1.0, 2.0])),
-    (resource_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
-    (resource_wrappers.TupleWrapper, (1, 2, 3)),
-    (resource_wrappers.SetWrapper, {1, 2, 3}),
-    (resource_wrappers.NPFloat16Wrapper, np.float16(1.0)),
-    (resource_wrappers.NPFloat32Wrapper, np.float32(1.0)),
-    (resource_wrappers.NPFloat64Wrapper, np.float64(1.0)),
+    (type_wrappers.NPArrayWrapper, np.array([0.0, 1.0, 2.0])),
+    (type_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
+    (type_wrappers.TupleWrapper, (1, 2, 3)),
+    (type_wrappers.SetWrapper, {1, 2, 3}),
+    (type_wrappers.NPFloat16Wrapper, np.float16(1.0)),
+    (type_wrappers.NPFloat32Wrapper, np.float32(1.0)),
+    (type_wrappers.NPFloat64Wrapper, np.float64(1.0)),
   ]
 
   def setUp(self):

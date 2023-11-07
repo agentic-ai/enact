@@ -14,6 +14,7 @@
 
 """Tests for function wrappers."""
 
+import asyncio
 import dataclasses
 import random
 from typing import Callable, Type
@@ -29,6 +30,11 @@ def python_to_python(i: int) -> str:
   return str(i)
 
 @enact.register
+async def async_python_to_python(i: int) -> str:
+  """An async python function that returns a string."""
+  return str(i)
+
+@enact.register
 @dataclasses.dataclass
 class ResourceClassWithMembers(enact.Resource):
   """An enact resource with member functions."""
@@ -40,9 +46,14 @@ class ResourceClassWithMembers(enact.Resource):
     return str(x)
 
   @enact.register
+  async def foo_async(self, x: int):
+    self.calls += 1
+    return str(x)
+
+  @enact.register
   def bar(self) -> int:
     self.foo(2)
-    self.foo(3)
+    asyncio.run(self.foo_async(3))
     return self.calls
 
 
@@ -50,6 +61,13 @@ class ResourceClassWithMembers(enact.Resource):
 class MyInvokable(enact.Invokable[int, str]):
   """An old-school invokable."""
   def call(self, value: int) -> str:
+    return str(value)
+
+
+@enact.register
+class MyAsyncInvokable(enact.AsyncInvokable[int, str]):
+  """An old-school async invokable."""
+  async def call(self, value: int) -> str:
     return str(value)
 
 
@@ -65,6 +83,12 @@ class WrappedClassWithMember:
 
   @enact.register
   def bar(self):
+    self.foo(1)
+    self.foo(2)
+    return self.x
+
+  @enact.register
+  async def async_bar(self):
     self.foo(1)
     self.foo(2)
     return self.x
@@ -100,15 +124,22 @@ class FunctionWrappersTest(unittest.TestCase):
 
   def test_python_to_python(self):
     """Test wrapping a python function."""
-    #self.assertEqual(python_to_python(3), '3')
+    self.assertEqual(python_to_python(3), '3')
     with self.store:
       invocation = enact.invoke(python_to_python, (3,))
       self.assertEqual(invocation.get_output(), '3')
       self.assertEqual(invocation.request().invokable(), python_to_python)
 
+  def test_async_python_to_python(self):
+    """Test wrapping an async python function."""
+    self.assertEqual(asyncio.run(async_python_to_python(3)), '3')
+    with self.store:
+      invocation = asyncio.run(enact.invoke_async(async_python_to_python, (3,)))
+      self.assertEqual(invocation.get_output(), '3')
+      self.assertEqual(invocation.request().invokable(), async_python_to_python)
+
   def test_invoke_unregistered(self):
     """Test invoking an unregistered function."""
-    self.assertEqual(python_to_python(3), '3')
     def unregistered(i: int) -> str:
       return str(i)
     with self.store:
@@ -116,9 +147,17 @@ class FunctionWrappersTest(unittest.TestCase):
       self.assertEqual(invocation.get_output(), '3')
       self.assertEqual(list(invocation.get_children()), [])
 
+  def test_invoke_unregistered_async(self):
+    """Test invoking an async unregistered function."""
+    async def unregistered(i: int) -> str:
+      return str(i)
+    with self.store:
+      invocation = asyncio.run(enact.invoke_async(unregistered, (3,)))
+      self.assertEqual(invocation.get_output(), '3')
+      self.assertEqual(list(invocation.get_children()), [])
+
   def test_invoke_unregistered_calls_registered(self):
     """Test an unregistered function that calls a registered function."""
-    self.assertEqual(python_to_python(3), '3')
     def unregistered(i: int) -> str:
       return python_to_python(i)
     with self.store:
@@ -127,11 +166,28 @@ class FunctionWrappersTest(unittest.TestCase):
       (child,) = invocation.get_children()
       self.assertEqual(child.request().invokable(), python_to_python)
 
+  def test_invoke_unregistered_calls_registered_async(self):
+    """Test an unregistered async_function that calls a registered function."""
+    async def unregistered(i: int) -> str:
+      return await async_python_to_python(i)
+    with self.store:
+      invocation = asyncio.run(enact.invoke_async(unregistered, (3,)))
+      self.assertEqual(invocation.get_output(), '3')
+      (child,) = invocation.get_children()
+      self.assertEqual(child.request().invokable(), async_python_to_python)
+
   def test_invoke_invokable(self):
     """Tests invoking a standard invokable."""
     with self.store:
       self.assertEqual(
         enact.invoke(MyInvokable(), (3,)).get_output(), '3')
+
+  def test_invoke_async_invokable(self):
+    """Tests invoking an async invokable."""
+    with self.store:
+      self.assertEqual(
+        asyncio.run(
+          enact.invoke_async(MyAsyncInvokable(), (3,))).get_output(), '3')
 
   def test_replay_fails_on_unregistered(self):
     """Tests that replay will fail on an unregistered function."""
@@ -169,10 +225,16 @@ class FunctionWrappersTest(unittest.TestCase):
     @enact.register
     @dataclasses.dataclass
     class MyClass(enact.Resource):
+      """Class with sync and async members."""
       calls: int = 0
 
       @enact.register
       def foo(self, x: int):
+        self.calls += 1
+        return str(x)
+
+      @enact.register
+      async def bar(self, x: int):
         self.calls += 1
         return str(x)
 
@@ -181,6 +243,10 @@ class FunctionWrappersTest(unittest.TestCase):
       invocation = enact.invoke(instance.foo, (3,))
       self.assertEqual(invocation.get_output(), '3')
       self.assertEqual(instance.calls, 1)
+      invocation = asyncio.run(
+        enact.invoke_async(instance.bar, (3,)))
+      self.assertEqual(invocation.get_output(), '3')
+      self.assertEqual(instance.calls, 2)
 
   def test_member_replay(self):
     """Tests that updates to self are correctly replayed."""
@@ -194,6 +260,7 @@ class FunctionWrappersTest(unittest.TestCase):
       self.assertEqual(invocation.request().invokable().__self__.calls, 0)
 
   def test_member_of_non_enact_class_fails(self):
+    """Tests that registering a member function of a non-enact class fails."""
     class UnwrappedClass:
       def __init__(self, x: int):
         self.x = x
@@ -208,11 +275,10 @@ class FunctionWrappersTest(unittest.TestCase):
 
       with self.assertRaises(enact.FieldTypeError) as e:
         enact.invoke(instance.foo, (5,))
-      self.assertIn('Please register a ResourceWrapper', str(e.exception))
+      self.assertIn('Please register a TypeWrapper', str(e.exception))
 
   def test_member_of_wrapped_class_replay_succeeds(self):
     """Tests that wrapped classes can be replayed."""
-
     with self.store:
       instance = WrappedClassWithMember(0)
       invocation = enact.invoke(instance.bar)
@@ -228,12 +294,12 @@ class FunctionWrappersTest(unittest.TestCase):
       return inv(rc.bar() + rc.bar())
 
     @enact.register
-    def registered_two(inv: MyInvokable):
+    async def registered_two(inv: MyInvokable):
       wc = WrappedClassWithMember(2)
       return inv(wc.bar() + wc.bar() - 1)
 
     def unregistered(inv):
-      return registered_one(inv) + registered_two(inv)
+      return registered_one(inv) + asyncio.run(registered_two(inv))
 
     inv = MyInvokable()
     with self.store:

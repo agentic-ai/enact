@@ -308,11 +308,104 @@ class Call(invocations.Invokable[CallArgs, Any]):
     args, kwargs = resource.to_python_args()
     return self._callable(*args, **kwargs)
 
+@resource_registry.register
+@dataclasses.dataclass
+class AsyncCall(invocations.AsyncInvokable[CallArgs, Any]):
+  """An invokable representing a call to an async unregistered function."""
+  function_name: str
+
+  def __post_init__(self):
+    """"""
+    self._callable: Optional[Callable] = None
+
+  @classmethod
+  def create(cls, function_name: str, fun: Callable) -> 'AsyncCall':
+    """Create a new call, setting the callable."""
+    call = AsyncCall(function_name)
+    call._callable = fun
+    return call
+
+  async def call(self, resource: CallArgs) -> Any:
+    """Call the wrapped function."""
+    if not self._callable:
+      raise invocations.InvocationError(
+        'Cannot repeat a call of an unregistered function. '
+        'Please make sure your top-level function is registered.')
+    args, kwargs = resource.to_python_args()
+    return await self._callable(*args, **kwargs)
+
 
 def get_wrapper_type(fun: Callable) -> Optional[
     resource_registry.FunctionWrapper]:
   """Return the CallableInvokable of this function, if it has one."""
   return getattr(fun, '_enact_function_wrapper_type', None)
+
+
+class _NotAnInvokable(Exception):
+  """Raised when a callable is not an invokable."""
+
+
+def _get_invokable_and_arg(
+  fun: Callable, args: Sequence, kwargs: Mapping[str, Any]) -> Tuple[
+    Callable, invocations._InvokableBase, references.Ref]:
+  """Get the underlying invokable and relevant resource arg."""
+  try:
+    wrapped = resource_registry.wrap(fun)  # Try wrapping the callable.
+  except interfaces.FieldTypeError:
+    wrapped = None
+  call_args: Optional[references.Ref] = None
+  if wrapped:
+    if not callable(wrapped):
+      raise TypeError(
+        f'The wrapper {wrapped} of {fun} is not callable.')
+    fun = wrapped
+
+  # pylint: disable=protected-access
+  if not isinstance(fun, invocations._InvokableBase):
+    raise _NotAnInvokable()
+
+  invokable = fun
+  if fun.get_input_type() == CallArgs:
+    call_args = references.commit(CallArgs.from_python_args(
+      *args, **kwargs))
+  elif isinstance(fun, (resource_registry.FunctionWrapper,
+                        resource_registry.MethodWrapper)):
+    call_args = references.commit(CallArgs.from_python_args(
+      *args, **kwargs))
+  else:
+    if len(args) > 1 or kwargs:
+      raise ValueError(
+        'Invokables can only be invoked with up to one arg and no kwargs.')
+    if args:
+      call_args = references.commit(args[0])
+    else:
+      call_args = references.commit(None)
+  return fun, invokable, call_args
+
+
+def _strip_extra_call(
+    fun: Callable,
+    invocation: invocations.Invocation,
+    commit: bool) -> invocations.Invocation:
+  """Strip extraneous Call invokable."""
+  # Remove the extraneous Call invocation if the called object
+  # was a registered python function.
+  # pylint: disable=protected-access
+  if not isinstance(fun, invocations._InvokableBase):
+    # Remove the top level of invocation.
+    invokable_wrapper = get_wrapper_type(fun)
+    if invokable_wrapper:
+      children = list(invocation.get_children())
+      assert len(children) == 1, (
+        f'Expected one child containing the CallableInvokable associated '
+        f'with {fun}. Got {len(children)} children instead.')
+      invocation = children[0]
+  elif commit:
+    # This is an elif rather than an if, because the child is already
+    # committed regardless of the setting, so we don't need to repeat
+    # work in that case.
+    references.commit(invocation)
+  return invocation
 
 
 def invoke(
@@ -325,7 +418,7 @@ def invoke(
       invocations.InvocationError, interfaces.FrameworkError),
     wrap_exceptions: bool=False,
     strict: bool=True,
-    commit: bool=True):
+    commit: bool=True) -> invocations.Invocation:
   """Invoke an invokable, wrapped function or python callable.
 
   Args:
@@ -343,40 +436,22 @@ def invoke(
     commit: Whether to commit the invocation after invoking.
   """
   kwargs = kwargs or {}
+  resource_arg: Optional[references.Ref] = None
   try:
-    wrapped = resource_registry.wrap(fun)  # Try wrapping the callable.
-  except interfaces.FieldTypeError:
-    wrapped = None
-  call_args: Optional[references.Ref] = None
-  if wrapped:
-    if not callable(wrapped):
-      raise TypeError(
-        f'The wrapper {wrapped} of {fun} is not callable.')
-    fun = wrapped
-  if isinstance(fun, invocations.InvokableBase):
-    invokable = fun
-    if fun.get_input_type() == CallArgs:
-      call_args = references.commit(CallArgs.from_python_args(
-        *args, **kwargs))
-    elif isinstance(fun, (resource_registry.FunctionWrapper,
-                          resource_registry.MethodWrapper)):
-      call_args = references.commit(CallArgs.from_python_args(
-        *args, **kwargs))
-    else:
-      if len(args) > 1 or kwargs:
-        raise ValueError(
-          'Invokables can only be invoked with up to one arg and no kwargs.')
-      if args:
-        call_args = references.commit(args[0])
-      else:
-        call_args = references.commit(None)
-  else:
-    call_args = references.commit(
+    fun, invokable, resource_arg = _get_invokable_and_arg(fun, args, kwargs)
+  except _NotAnInvokable:
+    resource_arg = references.commit(
       CallArgs.from_python_args(*args, **kwargs))
     invokable = Call.create(f'{fun.__module__}.{fun.__qualname__}', fun)
 
+  if isinstance(invokable, invocations.AsyncInvokableBase):
+    raise TypeError(
+      'Cannot invoke an AsyncInvokable. Use invoke_async instead.')
+
+  assert isinstance(invokable, invocations.InvokableBase)
+
   invocation = invokable.invoke(
-    call_args,
+    resource_arg,
     replay_from=replay_from,
     exception_override=exception_override,
     raise_on_errors=raise_on_errors,
@@ -385,17 +460,59 @@ def invoke(
     # Skip commit, since we may throw away the outermost invocation:
     commit=False)
 
-  # Remove the extraneous Call invocation if the called object
-  # was a registered python function.
-  if not isinstance(fun, invocations.InvokableBase):
-    invokable_wrapper = get_wrapper_type(fun)
-    if invokable_wrapper:
-      children = list(invocation.get_children())
-      assert len(children) == 1, (
-        f'Expected one child containing the CallableInvokable associated '
-        f'with {fun}. Got {len(children)} children instead.')
-      invocation = children[0]
-  elif commit:
-    references.commit(invocation)
+  return _strip_extra_call(fun, invocation, commit)
 
-  return invocation
+
+async def invoke_async(
+    fun: Callable,
+    args: Sequence=(),
+    kwargs: Optional[Mapping[str, Any]]=None,
+    replay_from: Optional[invocations.Invocation]=None,
+    exception_override: invocations.ExceptionOverride=lambda _: None,
+    raise_on_errors: Tuple[Type[Exception], ...]=(
+      invocations.InvocationError, interfaces.FrameworkError),
+    wrap_exceptions: bool=False,
+    strict: bool=True,
+    commit: bool=True) -> invocations.Invocation:
+  """Invoke an invokable, wrapped function or python callable.
+
+  Args:
+    fun: A callable to invoke.
+    args: The args to pass to callable.
+    kwargs: The kwargs to pass to callable.
+    replay_from: The invocation to replay from.
+    exception_override: A function that takes an exception and returns either
+      None or a resource to override the exception with.
+    raise_on_errors: Which errors should raise beyond the invocation.
+    wrap_exceptions: Whether to wrap non-resource exceptions in NativeException.
+      If False, non-resource exceptions raised during invocation will be
+      re-raised.
+    strict: If replaying, whether to replay strictly (expecting the same calls).
+    commit: Whether to commit the invocation after invoking.
+  """
+  kwargs = kwargs or {}
+  resource_arg: Optional[references.Ref] = None
+  try:
+    fun, invokable, resource_arg = _get_invokable_and_arg(fun, args, kwargs)
+  except _NotAnInvokable:
+    resource_arg = references.commit(
+      CallArgs.from_python_args(*args, **kwargs))
+    invokable = AsyncCall.create(f'{fun.__module__}.{fun.__qualname__}', fun)
+
+  if isinstance(invokable, invocations.InvokableBase):
+    raise TypeError(
+      'Cannot invoke_async an Invokable. Use invoke instead.')
+
+  assert isinstance(invokable, invocations.AsyncInvokableBase)
+
+  invocation = await invokable.invoke(
+    resource_arg,
+    replay_from=replay_from,
+    exception_override=exception_override,
+    raise_on_errors=raise_on_errors,
+    wrap_exceptions=wrap_exceptions,
+    strict=strict,
+    # Skip commit, since we may throw away the outermost invocation:
+    commit=False)
+
+  return _strip_extra_call(fun, invocation, commit)

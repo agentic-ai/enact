@@ -312,7 +312,7 @@ class Registry:
         f'{self._type_map[type_id]}\n')
     self._type_map[type_id] = resource
     if issubclass(resource, interfaces.TypeWrapperBase):
-      self._register_resource_wrapper(resource)
+      self._register_type_wrapper(resource)
     if issubclass(resource, FunctionWrapper):
       return self._register_function_wrapper(resource)
 
@@ -328,7 +328,7 @@ class Registry:
     self._function_wrappers[
         wrapper_type.wrapper_function()] = wrapper_type
 
-  def _register_resource_wrapper(self, wrapper_type: Type[WrapperT]):
+  def _register_type_wrapper(self, wrapper_type: Type[WrapperT]):
     """Register a new wrapper type."""
     self._wrapped_types[wrapper_type.wrapped_type()] = wrapper_type
     self._wrapper_types.add(wrapper_type)
@@ -374,9 +374,12 @@ class Registry:
       return type_wrapper_class.wrap(value)
     if callable(value):
       return self._get_function_wrapper_type(value).wrap(value)
+    if inspect.iscoroutine(value):
+      raise MissingWrapperError(
+        f'Cannot wrap coroutine {value}. Did you forget to await it?')
     raise MissingWrapperError(
       f'Cannot wrap value of type {type(value)}. Please register '
-      f'a ResourceWrapper for this type.')
+      f'a TypeWrapper for this type.')
 
   def wrap_type(self, value: Type) -> Type[interfaces.ResourceBase]:
     """Wrap a type if necessary."""
@@ -387,7 +390,7 @@ class Registry:
       return wrapper
     raise MissingWrapperError(
       f'Cannot wrap type {value}. Please register '
-      f'a ResourceWrapper for this type.')
+      f'a TypeWrapper for this type.')
 
   def unwrap(self, value: interfaces.ResourceBase) -> Any:
     """Unwrap a value if wrapped."""
@@ -426,7 +429,7 @@ def register(cls: Type[ResourceT]) -> Type[ResourceT]:
 def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
   """Decorator for resource wrapper classes."""
   # pylint: disable=protected-access
-  Registry.get()._register_resource_wrapper(cls)
+  Registry.get()._register_type_wrapper(cls)
   return cls
 
 

@@ -15,6 +15,7 @@
 """Top-level definitions."""
 
 from enact.function_wrappers import invoke
+from enact.function_wrappers import invoke_async
 
 from enact.resource_digests import resource_digest
 
@@ -77,7 +78,7 @@ from enact.resource_registry import wrap
 from enact.resource_registry import unwrap
 
 # Trigger registration of standard resource wrappers.
-import enact.resource_wrappers
+import enact.type_wrappers
 
 from enact.serialization import Serializer
 from enact.serialization import JsonSerializer
