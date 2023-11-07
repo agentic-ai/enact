@@ -106,8 +106,7 @@ class NPFloatWrapper(resources.ResourceWrapper):
   @classmethod
   def wrap(cls: Type[NPFloatWrapperT], value: np.float32) -> NPFloatWrapperT:
     """Returns a wrapper for the resource."""
-    value = float(value)
-    return cls(value=value)
+    return cls(value=float(value))
 
   def unwrap(self) -> np.ndarray:
     """Returns the wrapped resource."""
