@@ -260,7 +260,7 @@ class MethodWrapper(interfaces.ResourceBase):
     """The python function that is being called by this invokable."""
     raise NotImplementedError()
 
-  def get_instance(self):
+  def get_instance(self) -> Any:
     """Added to interface to simplify typing."""
     return self.instance  # type: ignore
 
