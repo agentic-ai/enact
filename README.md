@@ -359,9 +359,9 @@ considered code or data.
 
 ## Development and Contributing
 
-Enact is currently in alpha release. The framework is open source and Apache
-licensed. We are actively looking for contributors that are excited about the
-vision.
+The framework is open source and Apache licensed. We are actively looking for
+contributors that are excited about the vision. If you're interested in the
+project, feel free to reach out to leo@agentic.ai.
 
 You can download the source code, report issues and create pull requests at
 https://github.com/agentic-ai/enact.
