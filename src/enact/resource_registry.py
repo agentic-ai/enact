@@ -15,7 +15,6 @@
 """Type registration functionality to allow deserialization of resources."""
 
 import inspect
-from types import MethodType
 import types
 from typing import (
   Any, Callable, Dict, Hashable, Iterable, Mapping, Optional, Set,
@@ -240,7 +239,7 @@ class MethodWrapper(interfaces.ResourceBase):
   """Base class for method wrappers."""
 
   @classmethod
-  def wrap(cls: Type[MethodWrapperT], m: MethodType) -> MethodWrapperT:
+  def wrap(cls: Type[MethodWrapperT], m: types.MethodType) -> MethodWrapperT:
     """Wrap a method."""
     assert inspect.ismethod(m), 'Expected method.'
     assert m.__self__, 'Expected __self__ attribute on bound method.'
