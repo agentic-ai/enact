@@ -98,8 +98,11 @@ class Ref(Generic[R], interfaces.ResourceBase):
   @classmethod
   def from_id(cls: Type[P], ref_id: str) -> P:
     """Returns a string version of this reference."""
-    return cls.from_resource_dict(
-      interfaces.ResourceDict(cls, **json.loads(ref_id)))
+    try:
+      return cls.from_resource_dict(
+        interfaces.ResourceDict(cls, **json.loads(ref_id)))
+    except json.JSONDecodeError as error:
+      raise RefError(f'Invalid ref id: {ref_id}') from error
 
   @contextlib.contextmanager
   def modify(self) -> Iterator[R]:
