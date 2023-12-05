@@ -19,8 +19,10 @@ from types import MethodType
 from typing import (
   Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type, TypeVar,
   Union)
-import wrapt  # type: ignore
 import dataclasses
+import types
+
+import wrapt  # type: ignore
 
 from enact import interfaces
 from enact import invocations
@@ -129,8 +131,8 @@ class MethodWrapper(invocations.Invokable,
   instance: Any
 
   def call(self, call_args: CallArgs):
-    bound = resource_registry.MethodType(self.wrapped_function(),
-                                         self.get_instance())
+    bound = types.MethodType(self.wrapped_function(),
+                             self.get_instance())
     args, kwargs = call_args.to_python_args()
     return bound(*args, **kwargs)  # pylint: disable=not-callable
 
