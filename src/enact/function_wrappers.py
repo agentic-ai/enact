@@ -282,7 +282,8 @@ def register(fun: C) -> C:
 
   # pylint: disable=protected-access
   wrapper_type._wrapper_function = [wrapper_fun]  # type: ignore
-  wrapper_type.method_wrapper()._wrapper_function = [wrapper_fun]  # type: ignore
+  wrapper_type.method_wrapper()._wrapper_function = [
+    wrapper_fun]  # type: ignore
 
   resource_registry.register(wrapper_type)
   resource_registry.register(wrapper_type.method_wrapper())
