@@ -166,7 +166,9 @@ def _create_async_function_wrapper(wrapped: Callable) -> (
   """Create an enact async function wrapper for the given callable."""
   class _MethodWrapper(AsyncMethodWrapper):
     """The generated method wrapper."""
-    _wrapper_function: Optional[Callable] = None
+    # List valued to work around bug:
+    # https://github.com/GrahamDumpleton/wrapt/issues/256
+    _wrapper_function: List[Callable] = []
 
     @classmethod
     def wrapped_function(cls) -> Callable:
@@ -177,11 +179,13 @@ def _create_async_function_wrapper(wrapped: Callable) -> (
     def wrapper_function(cls) -> Callable:
       """The associated function wrapper."""
       assert cls._wrapper_function
-      return cls._wrapper_function
+      return cls._wrapper_function[0]
 
   class _FunctionWrapper(AsyncFunctionWrapper):
     """The generated function wrapper."""
-    _wrapper_function: Optional[Callable] = None
+    # List valued to work around bug:
+    # https://github.com/GrahamDumpleton/wrapt/issues/256
+    _wrapper_function: List[Callable] = []
 
     @classmethod
     def wrapped_function(cls) -> Callable:
@@ -192,7 +196,7 @@ def _create_async_function_wrapper(wrapped: Callable) -> (
     def wrapper_function(cls) -> Callable:
       """The associated function wrapper."""
       assert cls._wrapper_function
-      return cls._wrapper_function
+      return cls._wrapper_function[0]
 
     @classmethod
     def method_wrapper(cls) -> Type[_MethodWrapper]:
@@ -207,7 +211,9 @@ def _create_sync_function_wrapper(fun: Callable) -> (
   """Create an enact function wrapper for the given callable."""
   class _MethodWrapper(MethodWrapper):
     """The generated method wrapper"""
-    _wrapper_function: Optional[Callable] = None
+    # List valued to work around bug:
+    # https://github.com/GrahamDumpleton/wrapt/issues/256
+    _wrapper_function: List[Callable] = []
 
     @classmethod
     def wrapped_function(cls) -> Callable:
@@ -218,11 +224,13 @@ def _create_sync_function_wrapper(fun: Callable) -> (
     def wrapper_function(cls) -> Callable:
       """The associated wrapper function."""
       assert cls._wrapper_function
-      return cls._wrapper_function
+      return cls._wrapper_function[0]
 
   class _FunctionWrapper(FunctionWrapper):
     """The generated function wrapper."""
-    _wrapper_function: Optional[Callable] = None
+    # List valued to work around bug:
+    # https://github.com/GrahamDumpleton/wrapt/issues/256
+    _wrapper_function: List[Callable] = []
 
     @classmethod
     def wrapped_function(cls) -> Callable:
@@ -233,11 +241,7 @@ def _create_sync_function_wrapper(fun: Callable) -> (
     def wrapper_function(cls) -> Callable:
       """The associated wrapper function."""
       assert cls._wrapper_function
-      # This unfortunately binds the function to cls, yielding a
-      # BoundFunctionWrapper. We don't want that here, so we undo
-      # the binding and return the parent, which is a function wrapper.
-      # pylint: disable=protected-access
-      return cls._wrapper_function._self_parent  # type: ignore
+      return cls._wrapper_function[0]  # type: ignore
 
     @classmethod
     def method_wrapper(cls) -> Type[_MethodWrapper]:
@@ -277,8 +281,8 @@ def register(fun: C) -> C:
   wrapper_fun = _wrapt_wrapper(wrapper_type)(fun)
 
   # pylint: disable=protected-access
-  wrapper_type._wrapper_function = wrapper_fun  # type: ignore
-  wrapper_type.method_wrapper()._wrapper_function = wrapper_fun  # type: ignore
+  wrapper_type._wrapper_function = [wrapper_fun]  # type: ignore
+  wrapper_type.method_wrapper()._wrapper_function = [wrapper_fun]  # type: ignore
 
   resource_registry.register(wrapper_type)
   resource_registry.register(wrapper_type.method_wrapper())

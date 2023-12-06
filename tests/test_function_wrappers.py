@@ -414,3 +414,28 @@ class FunctionWrappersTest(unittest.TestCase):
       ref = enact.commit(MyClass(3).foo)
       self.assertEqual(ref().__self__.x, 3)
       self.assertEqual(ref()(), 3)
+
+  def test_member_callables_after_checkout(self):
+    """Tests that function wrappers work correctly after checkout."""
+    @enact.register
+    def foo() -> int:
+      return 0
+
+    @enact.register
+    async def async_foo() -> int:
+      return 0
+
+    @enact.register
+    @dataclasses.dataclass
+    class MyClass(enact.Resource):
+      f1: Callable
+      f2: Callable
+
+    with self.store:
+      resource = MyClass(foo, async_foo)
+      # Check out without caching.
+      resource = enact.Ref.from_id(enact.commit(resource).id).checkout()
+      f1 = resource.f1
+      self.assertEqual(f1(), 0)
+      f2 = resource.f2
+      self.assertEqual(asyncio.run(f2()), 0)
