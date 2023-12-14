@@ -50,6 +50,20 @@ class UnregisteredContext(SimpleContext):
   """A context that was not registered."""
 
 
+@contexts.register_to_superclass(SimpleContext)
+class DerivedContextA(SimpleContext):
+  """A derived context from SimpleContext."""
+
+
+@contexts.register_to_superclass(SimpleContext)
+class DerivedContextB(SimpleContext):
+  """Another derived context from SimpleContext."""
+
+
+class UnregisteredDerivedContext(SimpleContext):
+  """A derived context that was not registered."""
+
+
 class ContextTest(unittest.TestCase):
   """Test cases for the context class."""
 
@@ -77,6 +91,73 @@ class ContextTest(unittest.TestCase):
       with SimpleContext.top_level():
         self.assertEqual(SimpleContext.get_current(), None)
       self.assertEqual(SimpleContext.current(), s1)
+
+  def test_derived_context(self):
+    """Tests that derived contexts work as expected."""
+    with DerivedContextA() as a:
+      self.assertEqual(SimpleContext.get_current(), a)
+      self.assertEqual(DerivedContextA.get_current(), a)
+
+  def test_derived_context_different_subclass(self):
+    """Tests that sibling derived contexts work as expected."""
+    with DerivedContextA():
+      with self.assertRaisesRegex(LookupError, 'not of type'):
+        DerivedContextB.get_current()
+
+  def test_derived_context_unregistered(self):
+    """Tests that unregistered derived contexts fail."""
+    with self.assertRaisesRegex(contexts.ContextError, 'not registered'):
+      with UnregisteredDerivedContext():
+        pass
+
+  def test_register_to_superclass_unregistered_superclass(self):
+    """Tests registering to an unregistered superclass."""
+    class BaseContext(contexts.Context):
+      pass
+
+    class DerivedContext(BaseContext):
+      pass
+
+    with self.assertRaisesRegex(AssertionError, 'Superclass .* not registered'):
+      contexts.register_to_superclass(BaseContext)(DerivedContext)
+
+  def test_register_to_superclass_not_subclass(self):
+    """Tests registering to a non-parent class."""
+    @contexts.register
+    class BaseContext(contexts.Context):
+      pass
+
+    class NonDerivedContext(contexts.Context):
+      pass
+
+    with self.assertRaisesRegex(AssertionError, 'must be a subclass'):
+      contexts.register_to_superclass(BaseContext)(NonDerivedContext)
+
+  def test_register_to_superclass_twice(self):
+    """Tests registering to superclass twice."""
+    @contexts.register
+    class BaseContext(contexts.Context):
+      pass
+
+    class DerivedContext(BaseContext):
+      pass
+
+    contexts.register_to_superclass(BaseContext)(DerivedContext)
+    with self.assertRaisesRegex(AssertionError, 'already registered'):
+      contexts.register_to_superclass(BaseContext)(DerivedContext)
+
+  def test_register_to_superclass_seperately_registered(self):
+    """Tests registering to superclass after regular registration."""
+    @contexts.register
+    class BaseContext(contexts.Context):
+      pass
+
+    @contexts.register
+    class DerivedContext(BaseContext):
+      pass
+
+    with self.assertRaisesRegex(AssertionError, 'already registered'):
+      contexts.register_to_superclass(BaseContext)(DerivedContext)
 
 
 class ContextDecoratorTest(unittest.TestCase):
