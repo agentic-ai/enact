@@ -326,13 +326,19 @@ class Store(contexts.Context):
     return ref.unpack(packed_resource)
 
 
-# pylint: disable=invalid-name
-def InMemoryStore() -> Store:
-  """Returns an in-memory store."""
-  return Store(backend=InMemoryBackend())
+@contexts.register_to_superclass(Store)
+class FileStore(Store):
+  """A file-based store."""
+
+  def __init__(self, root_dir: str):
+    """Initializes the store."""
+    super().__init__(backend=FileBackend(root_dir))
 
 
-# pylint: disable=invalid-name
-def FileStore(root_dir: str):
-  """Returns a file-based store."""
-  return Store(backend=FileBackend(root_dir))
+@contexts.register_to_superclass(Store)
+class InMemoryStore(Store):
+  """An in-memory store."""
+
+  def __init__(self):
+    """Initializes the store."""
+    super().__init__(backend=InMemoryBackend())
