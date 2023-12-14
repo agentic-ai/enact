@@ -101,6 +101,9 @@ class Context:
         f'to annotate the thread function with either the '
         f'"@with_current_contexts" or "@with_new_contexts" decorator.'
         ) from lookup_error
+    if current_context is not None and not isinstance(current_context, cls):
+      raise LookupError(
+        f'Current context {current_context} is not of type {cls}.')
     return current_context
 
   @classmethod
@@ -142,6 +145,20 @@ def register(cls: Type[C]) -> Type[C]:
   ctx_var.set(None)
   _context_vars[cls] = ctx_var
   return cls
+
+
+def register_to_superclass(superclass: Type[C]) -> Callable[[Type[C]], Type[C]]:
+  def _register(cls: Type[C]) -> Type[C]:
+    """Registers a context class."""
+    assert cls not in _context_vars, (
+      f'Context class already registered: {cls}')
+    assert superclass in _context_vars, (
+      f'Superclass {superclass} not registered.')
+    assert issubclass(cls, superclass), (
+      f'Context class {cls} must be a subclass of {superclass}.')
+    _context_vars[cls] = _context_vars[superclass]
+    return cls
+  return _register
 
 
 R = TypeVar('R')
