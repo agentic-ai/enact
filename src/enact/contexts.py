@@ -30,28 +30,31 @@ class ContextError(Exception):
 class NoActiveContext(ContextError):
   """Raised when there is no active context."""
 
-C = TypeVar('C', bound='Context')
+ContextT = TypeVar('ContextT', bound='Context')
+ContextSuperT = TypeVar('ContextSuperT', bound='Context')
 
 
 class Context:
   """A thread-aware context superclass."""
 
-  def __init__(self: C):
+  def __init__(self: ContextT):
     """Creates a new context."""
-    self._token: Optional[contextvars.Token[Optional[C]]] = None
+    self._token: Optional[contextvars.Token[Optional[ContextT]]] = None
 
   @classmethod
-  def _get_context_var(cls: Type[C]) -> contextvars.ContextVar[Optional[C]]:
+  def _get_context_var(cls: Type[ContextT]) -> (
+      contextvars.ContextVar[Optional[ContextT]]):
     """Returns the context var for this type."""
     try:
-      return cast(contextvars.ContextVar[Optional[C]], _context_vars[cls])
+      return cast(
+        contextvars.ContextVar[Optional[ContextT]], _context_vars[cls])
     except KeyError as key_error:
       raise ContextError(
         f'Context {cls} not registered. A context class must be registered '
         f'with the "@register" decorator.') from key_error
 
   @classmethod
-  def permissive_initialization(cls: Type[C]) -> bool:
+  def permissive_initialization(cls: Type[ContextT]) -> bool:
     """Returns whether the class has permissive initialization.
 
     Contexts use contextvars for tracking whether an execution is in-context or
@@ -76,7 +79,7 @@ class Context:
 
   @classmethod
   @contextlib.contextmanager
-  def top_level(cls: Type[C]):
+  def top_level(cls: Type[ContextT]):
     """Returns a context manager to execute code in a top-level context."""
     context_var = cls._get_context_var()
     token = context_var.set(None)
@@ -87,7 +90,7 @@ class Context:
 
 
   @classmethod
-  def get_current(cls: Type[C]) -> Optional[C]:
+  def get_current(cls: Type[ContextT]) -> Optional[ContextT]:
     """Returns the current context of this type or None."""
     context_var = cls._get_context_var()
     try:
@@ -107,14 +110,14 @@ class Context:
     return current_context
 
   @classmethod
-  def current(cls: Type[C]) -> C:
+  def current(cls: Type[ContextT]) -> ContextT:
     """Returns the current context of this type or raises an error."""
     context = cls.get_current()
     if context is None:
       raise NoActiveContext(f'No context of type {cls.__qualname__} is active.')
     return context
 
-  def __enter__(self: C) -> C:
+  def __enter__(self: ContextT) -> ContextT:
     """Enters the context."""
     context_var = self._get_context_var()
     self.get_current()  # Raise an error if the context is not initialized.
@@ -122,7 +125,7 @@ class Context:
     self._token = context_var.set(self)
     return self
 
-  def __exit__(self: C, exc_type, exc_value, traceback):
+  def __exit__(self: ContextT, exc_type, exc_value, traceback):
     """Exits the context."""
     context_var = self._get_context_var()
     assert self._token
@@ -130,13 +133,13 @@ class Context:
     self.exit()
     self._token = None
 
-  def enter(self: C):
+  def enter(self: ContextT):
     """Overridable on context entry."""
 
-  def exit(self: C):
+  def exit(self: ContextT):
     """Overridable on context exit."""
 
-def register(cls: Type[C]) -> Type[C]:
+def register(cls: Type[ContextT]) -> Type[ContextT]:
   """Registers a context class."""
   assert cls not in _context_vars, (
     f'Context class already registered: {cls}')
@@ -147,8 +150,9 @@ def register(cls: Type[C]) -> Type[C]:
   return cls
 
 
-def register_to_superclass(superclass: Type[C]) -> Callable[[Type[C]], Type[C]]:
-  def _register(cls: Type[C]) -> Type[C]:
+def register_to_superclass(superclass: Type[ContextSuperT]) -> Callable[
+    [Type[ContextT]], Type[ContextT]]:
+  def _register(cls: Type[ContextT]) -> Type[ContextT]:
     """Registers a context class."""
     assert cls not in _context_vars, (
       f'Context class already registered: {cls}')
@@ -157,7 +161,9 @@ def register_to_superclass(superclass: Type[C]) -> Callable[[Type[C]], Type[C]]:
     assert issubclass(cls, superclass), (
       f'Context class {cls} must be a subclass of {superclass}.')
     _context_vars[cls] = _context_vars[superclass]
-    return cls
+    # MyPy can't handle intersection types, which is what would be required
+    # here. We cast to Type[ContextT] to make it happy.
+    return cast(Type[ContextT], cls)
   return _register
 
 
