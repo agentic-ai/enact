@@ -35,6 +35,10 @@ class TestTypeWrappers(unittest.TestCase):
     (type_wrappers.NPFloat16Wrapper, np.float16(1.0)),
     (type_wrappers.NPFloat32Wrapper, np.float32(1.0)),
     (type_wrappers.NPFloat64Wrapper, np.float64(1.0)),
+    (type_wrappers.NPInt8Wrapper, np.int8(1)),
+    (type_wrappers.NPInt16Wrapper, np.int16(1)),
+    (type_wrappers.NPInt32Wrapper, np.int32(1)),
+    (type_wrappers.NPInt64Wrapper, np.int64(1)),
   ]
 
   def setUp(self):
