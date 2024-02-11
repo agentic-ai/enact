@@ -101,7 +101,7 @@ class ContextTest(unittest.TestCase):
   def test_derived_context_different_subclass(self):
     """Tests that sibling derived contexts work as expected."""
     with DerivedContextA():
-      with self.assertRaisesRegex(LookupError, 'not of type'):
+      with self.assertRaisesRegex(contexts.ContextError, 'not of type'):
         DerivedContextB.get_current()
 
   def test_derived_context_unregistered(self):
