@@ -26,6 +26,9 @@ _context_vars: Dict[Type['Context'],
 class ContextError(Exception):
   """Error raised when there is a problem with the context."""
 
+class ContextTypeError(ContextError):
+  """Error raised when the context has an unexpected type"""
+
 
 class NoActiveContext(ContextError):
   """Raised when there is no active context."""
@@ -105,7 +108,7 @@ class Context:
         f'"@with_current_contexts" or "@with_new_contexts" decorator.'
         ) from lookup_error
     if current_context is not None and not isinstance(current_context, cls):
-      raise LookupError(
+      raise ContextTypeError(
         f'Current context {current_context} is not of type {cls}.')
     return current_context
 
@@ -120,7 +123,10 @@ class Context:
   def __enter__(self: ContextT) -> ContextT:
     """Enters the context."""
     context_var = self._get_context_var()
-    self.get_current()  # Raise an error if the context is not initialized.
+    try:
+      self.get_current()  # Raise an error if the context is not initialized.
+    except ContextTypeError:
+      pass   #  We don't care here if the context has the wrong type.
     self.enter()
     self._token = context_var.set(self)
     return self
