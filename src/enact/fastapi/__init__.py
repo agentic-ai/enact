@@ -13,4 +13,10 @@
 # limitations under the License.
 """FastAPI integration package."""
 
+try:
+  import fastapi
+except ModuleNotFoundError as e:
+  raise ModuleNotFoundError(
+      'Please install fastapi to enable enact.fastapi') from e
+
 from enact.fastapi.fastapi import *
