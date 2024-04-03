@@ -197,3 +197,15 @@ class StoreTest(unittest.TestCase):
       ref = store.commit(resource)
       self.assertTrue(store.has(ref))
       self.assertEqual(store.checkout(ref), resource)
+
+  def test_commit_cyclic_fails(self):
+    """Tests that commits with cylic resource graphs fail."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+      r1 = SimpleResource(x=1, y=2.0)
+      r2 = SimpleResource(x=1, y=2.0)
+      r1.x = r2  # type: ignore
+      r2.x = r1  # type: ignore
+
+      with enact.Store(backend=enact.FileBackend(tmpdir)):
+        with self.assertRaises(interfaces.FieldTypeError):
+          enact.commit(r1)
