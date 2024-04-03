@@ -17,7 +17,10 @@
 import abc
 import functools
 import json
-from typing import Dict, Generic, Iterable, List, Tuple, Type, TypeVar, Union
+from typing import (
+  Dict, Generic, Iterable, List, Optional, Tuple, Type, TypeVar, Union)
+
+from enact import contexts
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -52,11 +55,8 @@ C = TypeVar('C', bound='ResourceBase')
 
 
 class FrameworkError(Exception):
-  """Superclass for framework related errors.
+  """Superclass for framework related errors."""
 
-  Framework errors are not caught by the framework during tracked execution, but
-  are instead propagated to the caller.
-  """
 
 class ResourceError(FrameworkError):
   """Superclass for resource related errors."""
@@ -70,13 +70,44 @@ class FieldTypeError(FrameworkError):
   """Superclass for errors related to field types."""
 
 
+@contexts.register
+class _AcyclicContext(contexts.Context):
+  """Helper to safeguard against cyclic data-structures."""
+
+  def __init__(self, obj):
+    """Initializes the context."""
+    super().__init__()
+    self.parent: Optional[_AcyclicContext] = None
+    self.obj = obj
+
+  def enter(self):
+    """Check if the resource is already being committed."""
+    self.parent = _AcyclicContext.get_current()
+    parent = self.parent
+    parents: List[_AcyclicContext] = []
+    while parent is not None:
+      parents.append(parent)
+      if parent.obj is self.obj:
+        raise FieldTypeError(
+          f'Resources may not have cyclic graph structure. '
+          f'Encountered cycle: '
+          f'{" -> ".join(str(p.obj) for p in parents)}')
+      parent = parent.parent
+
+
 class ResourceBase:
   """Base class for resources.
 
   Not an abstract base class in order to avoid meta-class conflict.
 
   Resources have a unique type identifier. Each resource class is associated
-  with a fixed list of named fields.
+  with a fixed list of named fields. These fields must have value semantics,
+  that is, replacing a field by a copy should not change the meaning of the
+  resource. This means, for example, that code using resources should not rely
+  on aliasing assumptions (e.g., two resources sharing the same list instance).
+
+  In particular, this also means that resources may not mutually reference each
+  other.
   """
 
   @classmethod
@@ -115,25 +146,26 @@ class ResourceBase:
   @staticmethod
   def _to_dict_value(value: FieldValue) -> ResourceDictValue:
     """Transforms a field value to a resource dict value."""
-    if isinstance(value, ResourceBase):
-      return value.to_resource_dict()
-    if isinstance(value, PRIMITIVES):
-      return value
-    if isinstance(value, type) and issubclass(value, ResourceBase):
-      return value
-    if isinstance(value, List):
-      return [ResourceBase._to_dict_value(x) for x in value]
-    if isinstance(value, Dict):
-      def _assert_str(maybe_str: str) -> str:
-        if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
-          raise FieldTypeError(
-            f'Expected string key, got {type(maybe_str)}')
-        return maybe_str
-      return {
-        _assert_str(k): ResourceBase._to_dict_value(v)
-        for k, v in value.items()}
-    raise FieldTypeError(
-      f'Encountered unsupported field type {type(value)}: {value}')
+    with _AcyclicContext(value):
+      if isinstance(value, ResourceBase):
+        return value.to_resource_dict()
+      if isinstance(value, PRIMITIVES):
+        return value
+      if isinstance(value, type) and issubclass(value, ResourceBase):
+        return value
+      if isinstance(value, List):
+        return [ResourceBase._to_dict_value(x) for x in value]
+      if isinstance(value, Dict):
+        def _assert_str(maybe_str: str) -> str:
+          if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
+            raise FieldTypeError(
+              f'Expected string key, got {type(maybe_str)}')
+          return maybe_str
+        return {
+          _assert_str(k): ResourceBase._to_dict_value(v)
+          for k, v in value.items()}
+      raise FieldTypeError(
+        f'Encountered unsupported field type {type(value)}: {value}')
 
   @staticmethod
   def _from_dict_value(value: ResourceDictValue) -> FieldValue:
