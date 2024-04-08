@@ -33,31 +33,33 @@ class ContextTypeError(ContextError):
 class NoActiveContext(ContextError):
   """Raised when there is no active context."""
 
+ContextBaseT = TypeVar('ContextBaseT', bound='_ContextBase')
+ContextSuperT = TypeVar('ContextSuperT', bound='_ContextBase')
 ContextT = TypeVar('ContextT', bound='Context')
-ContextSuperT = TypeVar('ContextSuperT', bound='Context')
+AsyncContextT = TypeVar('AsyncContextT', bound='AsyncContext')
 
 
-class Context:
+class _ContextBase:
   """A thread-aware context superclass."""
 
-  def __init__(self: ContextT):
+  def __init__(self: ContextBaseT):
     """Creates a new context."""
-    self._token: Optional[contextvars.Token[Optional[ContextT]]] = None
+    self._token: Optional[contextvars.Token[Optional[ContextBaseT]]] = None
 
   @classmethod
-  def _get_context_var(cls: Type[ContextT]) -> (
-      contextvars.ContextVar[Optional[ContextT]]):
+  def _get_context_var(cls: Type[ContextBaseT]) -> (
+      contextvars.ContextVar[Optional[ContextBaseT]]):
     """Returns the context var for this type."""
     try:
       return cast(
-        contextvars.ContextVar[Optional[ContextT]], _context_vars[cls])
+        contextvars.ContextVar[Optional[ContextBaseT]], _context_vars[cls])
     except KeyError as key_error:
       raise ContextError(
         f'Context {cls} not registered. A context class must be registered '
         f'with the "@register" decorator.') from key_error
 
   @classmethod
-  def permissive_initialization(cls: Type[ContextT]) -> bool:
+  def permissive_initialization(cls: Type[ContextBaseT]) -> bool:
     """Returns whether the class has permissive initialization.
 
     Contexts use contextvars for tracking whether an execution is in-context or
@@ -82,7 +84,7 @@ class Context:
 
   @classmethod
   @contextlib.contextmanager
-  def top_level(cls: Type[ContextT]):
+  def top_level(cls: Type[ContextBaseT]):
     """Returns a context manager to execute code in a top-level context."""
     context_var = cls._get_context_var()
     token = context_var.set(None)
@@ -91,9 +93,8 @@ class Context:
     finally:
       context_var.reset(token)
 
-
   @classmethod
-  def get_current(cls: Type[ContextT]) -> Optional[ContextT]:
+  def get_current(cls: Type[ContextBaseT]) -> Optional[ContextBaseT]:
     """Returns the current context of this type or None."""
     context_var = cls._get_context_var()
     try:
@@ -113,12 +114,16 @@ class Context:
     return current_context
 
   @classmethod
-  def current(cls: Type[ContextT]) -> ContextT:
+  def current(cls: Type[ContextBaseT]) -> ContextBaseT:
     """Returns the current context of this type or raises an error."""
     context = cls.get_current()
     if context is None:
       raise NoActiveContext(f'No context of type {cls.__qualname__} is active.')
     return context
+
+
+class Context(_ContextBase):
+  """A thread-aware context superclass."""
 
   def __enter__(self: ContextT) -> ContextT:
     """Enters the context."""
@@ -139,13 +144,44 @@ class Context:
     self.exit()
     self._token = None
 
-  def enter(self: ContextT):
+  def enter(self):
     """Overridable on context entry."""
 
-  def exit(self: ContextT):
+  def exit(self):
     """Overridable on context exit."""
 
-def register(cls: Type[ContextT]) -> Type[ContextT]:
+
+class AsyncContext(_ContextBase):
+  """A thread-aware async context superclass."""
+
+  async def __aenter__(self: AsyncContextT) -> AsyncContextT:
+    """Enters the context."""
+    context_var = self._get_context_var()
+    try:
+      self.get_current()  # Raise an error if the context is not initialized.
+    except ContextTypeError:
+      pass   #  We don't care here if the context has the wrong type.
+    await self.aenter()
+    self._token = context_var.set(self)
+    return self
+
+  async def __aexit__(self, exc_type, exc_value, traceback):
+    """Exits the context."""
+    context_var = self._get_context_var()
+    assert self._token
+    context_var.reset(self._token)
+    await self.aexit()
+    self._token = None
+
+  async def aenter(self):
+    """Overridable on context entry."""
+
+  async def aexit(self):
+    """Overridable on context exit."""
+
+
+
+def register(cls: Type[ContextBaseT]) -> Type[ContextBaseT]:
   """Registers a context class."""
   assert cls not in _context_vars, (
     f'Context class already registered: {cls}')
@@ -157,8 +193,8 @@ def register(cls: Type[ContextT]) -> Type[ContextT]:
 
 
 def register_to_superclass(superclass: Type[ContextSuperT]) -> Callable[
-    [Type[ContextT]], Type[ContextT]]:
-  def _register(cls: Type[ContextT]) -> Type[ContextT]:
+    [Type[ContextBaseT]], Type[ContextBaseT]]:
+  def _register(cls: Type[ContextBaseT]) -> Type[ContextBaseT]:
     """Registers a context class."""
     assert cls not in _context_vars, (
       f'Context class already registered: {cls}')
@@ -169,7 +205,7 @@ def register_to_superclass(superclass: Type[ContextSuperT]) -> Callable[
     _context_vars[cls] = _context_vars[superclass]
     # MyPy can't handle intersection types, which is what would be required
     # here. We cast to Type[ContextT] to make it happy.
-    return cast(Type[ContextT], cls)
+    return cast(Type[ContextBaseT], cls)
   return _register
 
 

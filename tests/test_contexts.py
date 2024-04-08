@@ -14,6 +14,7 @@
 
 """Tests for the context module."""
 
+import asyncio
 import unittest
 import threading
 from typing import Any, Optional
@@ -43,6 +44,26 @@ class SimpleContext(contexts.Context):
       self.depth = 1
 
   def exit(self):
+    self.depth = None
+
+
+@contexts.register
+class AsyncSimpleContext(contexts.AsyncContext):
+  """An async context object for testing."""
+
+  def __init__(self):
+    super().__init__()
+    self.depth: Optional[int] = None
+
+  async def aenter(self):
+    cur = AsyncSimpleContext.get_current()
+    if cur:
+      assert cur.depth is not None
+      self.depth = cur.depth + 1
+    else:
+      self.depth = 1
+
+  async def exit(self):
     self.depth = None
 
 
@@ -207,3 +228,14 @@ class ContextDecoratorTest(unittest.TestCase):
       t.start()
       t.join()
     self.assertEqual(self.thread_result, 2)
+
+  def test_async_contexts(self):
+    """Test async contexts."""
+    async def _do_test():
+      async with AsyncSimpleContext():
+        self.assertEqual(AsyncSimpleContext.get_current().depth, 1)
+        async with AsyncSimpleContext():
+          self.assertEqual(AsyncSimpleContext.get_current().depth, 2)
+        self.assertEqual(AsyncSimpleContext.get_current().depth, 1)
+
+    asyncio.run(_do_test())
