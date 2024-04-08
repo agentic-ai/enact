@@ -36,6 +36,7 @@ class SimpleContext(contexts.Context):
     self.depth: Optional[int] = None
 
   def enter(self):
+    assert self.depth is None
     cur = SimpleContext.get_current()
     if cur:
       assert cur.depth is not None
@@ -56,6 +57,7 @@ class AsyncSimpleContext(contexts.AsyncContext):
     self.depth: Optional[int] = None
 
   async def aenter(self):
+    assert self.depth is None
     cur = AsyncSimpleContext.get_current()
     if cur:
       assert cur.depth is not None
