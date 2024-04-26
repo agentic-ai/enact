@@ -188,6 +188,13 @@ class DictWrapper(FieldValueWrapper[dict]):
     target.clear()
     target.update(src)
 
+class ResourceTypeWrapper(FieldValueWrapper[type]):
+  """Wrapper for type-valued fields."""
+
+  @classmethod
+  def wrapped_type(cls) -> Type[type]:
+    return type
+
 
 FunctionWrapperT = TypeVar('FunctionWrapperT', bound='FunctionWrapper')
 MethodWrapperT = TypeVar('MethodWrapperT', bound='MethodWrapper')
@@ -293,6 +300,7 @@ class Registry:
     self.register(BytesWrapper)
     self.register(ListWrapper)
     self.register(DictWrapper)
+    self.register(ResourceTypeWrapper)
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""

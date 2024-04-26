@@ -220,6 +220,42 @@ class RegistryTest(unittest.TestCase):
     instance.y = 420
     self.assertEqual(unwrapped_method.__self__.y, 420)
 
+  def test_wrap_type_value(self):
+    """Tests that wrapping methods works."""
+    @enact.register
+    class MyResource(enact.Resource):
+      pass
+
+    # Test for resource subclasses.
+    self.assertIsInstance(
+      enact.wrap(MyResource),
+      resource_registry.ResourceTypeWrapper)
+
+    # Test for types that have associated wrappers.
+    self.assertIsInstance(
+      enact.wrap(int),
+      resource_registry.ResourceTypeWrapper)
+
+    with enact.Store():
+      resource_type_ref = enact.commit(MyResource)
+      int_type_ref = enact.commit(int)
+
+      # Clear cache
+      resource_type_ref = enact.Ref.from_id(resource_type_ref.id)
+      int_type_ref = enact.Ref.from_id(int_type_ref.id)
+
+      # Checkout
+      self.assertEqual(resource_type_ref.checkout(), MyResource)
+      self.assertEqual(int_type_ref.checkout(), int)
+
+  def test_wrap_unregistered_type_fails(self):
+    """Tests that wrapping an unregistered type fails."""
+    class MyUnregisteredClass:
+      pass
+    with enact.Store():
+      with self.assertRaises(resource_registry.MissingWrapperError):
+        enact.wrap(MyUnregisteredClass)
+
   def test_deepcopy_primitives(self):
     """Tests that deep copying primitives works."""
     primitives = [1, 1.0, 'a', bytes([1, 2, 3]), True, False, None]
