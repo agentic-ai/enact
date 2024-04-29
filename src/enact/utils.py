@@ -14,7 +14,7 @@
 """Utility functions and classes."""
 from typing import Any, Dict, Optional
 
-import enact
+from enact import resource_digests
 
 # pylint: disable=invalid-name
 class cached_property(property):
@@ -30,7 +30,7 @@ class cached_property(property):
 
   def __get__(self, instance: Any, unused_owner: Optional[type] = None):
     """Cached property based on the digest of the resource."""
-    digest = enact.resource_digest(instance)
+    digest = resource_digests.resource_digest(instance)
     result = self._cache.get(digest, None)
     if result is None:
       result = self._user_function(instance)
