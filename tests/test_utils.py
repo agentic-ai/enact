@@ -16,6 +16,7 @@
 import dataclasses
 import unittest
 from unittest import mock
+from typing import Any, Type
 
 import enact
 from enact import utils
@@ -71,6 +72,57 @@ class UtilsTest(unittest.TestCase):
     with mock.patch.object(test_resource, '_get_foo', mock_getter):
       self.assertEqual(test_resource.value, 0)
       self.assertTrue(mock_getter.called)
+
+  def test_walk_resource_dict(self):
+    """Tests that walk resource dict works as expected."""
+    @enact.register
+    @dataclasses.dataclass
+    class TestResource(enact.Resource):
+      """A test resource."""
+      value: Any
+
+    @dataclasses.dataclass
+    class Wrapped:
+      """A wrapped resource"""
+      value: Any
+
+    @enact.register
+    @dataclasses.dataclass
+    class Wrapper(enact.TypeWrapper[Wrapped]):
+      """A simple wrapper"""
+      value: Any
+
+      @classmethod
+      def wrap(cls, value: Wrapped) -> 'Wrapper':
+        return cls(value=value.value)
+
+      @classmethod
+      def wrapped_type(cls) -> Type[Wrapped]:
+        return Wrapped
+
+      def unwrap(self) -> Wrapped:
+        return Wrapped(value=self.value)
+
+    test_instance = TestResource(
+      [TestResource(1),
+       TestResource(2),
+       [1, 2, 3, 4],
+       Wrapped({'a': Wrapped(1)})]
+    )
+
+    result = list(
+      utils.walk_resource_dict(test_instance.to_resource_dict()))
+
+    self.assertEqual(
+      result,
+      [
+        test_instance.to_resource_dict(),
+        TestResource(1).to_resource_dict(),
+        TestResource(2).to_resource_dict(),
+        Wrapper({'a': Wrapped(1)}).to_resource_dict(),
+        Wrapper(1).to_resource_dict()
+      ])
+
 
 if __name__ == '__main__':
   unittest.main()

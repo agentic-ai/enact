@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utility functions and classes."""
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
+from enact import interfaces
 from enact import resource_digests
 
 # pylint: disable=invalid-name
@@ -36,3 +37,25 @@ class cached_property(property):
       result = self._user_function(instance)
       self._cache = {digest: result}
     return result
+
+
+def walk_resource_dict(
+    value: interfaces.ResourceDictValue,
+    include_self: bool = True) -> Iterable[interfaces.ResourceDict]:
+  """Recursively yields all ResourceDict occurrences in the dictionary tree.
+
+  Args:
+    value: The value to walk.
+    include_self: Whether to also yield 'value' if it is a resource dict.
+
+  Yields:
+    All instances of ResourceDict in the subtree defined by 'value'.
+  """
+  if isinstance(value, interfaces.ResourceDict) and include_self:
+    yield value
+  if isinstance(value, dict):  # Both normal dicts and resource dicts.
+    for v in value.values():
+      yield from walk_resource_dict(v, include_self=True)
+  elif isinstance(value, list):
+    for v in value:
+      yield from walk_resource_dict(v, include_self=True)
