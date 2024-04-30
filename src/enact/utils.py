@@ -49,7 +49,8 @@ def walk_resource_dict(
     include_self: Whether to also yield 'value' if it is a resource dict.
 
   Yields:
-    All instances of ResourceDict in the subtree defined by 'value'.
+    All instances of ResourceDict in the subtree defined by 'value' in
+    depth-first order.
   """
   if isinstance(value, interfaces.ResourceDict) and include_self:
     yield value
