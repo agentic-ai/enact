@@ -66,7 +66,8 @@ class JsonPackedRef(enact.Ref):
     return references.PackedResource(
       JsonPackedResource(serialization.JsonSerializer().serialize(
         resource.to_resource_dict())).to_resource_dict(),
-      ref=cls.from_resource(resource))
+      ref=cls.from_resource(resource),
+      links=set())
 
 
 class RefTest(unittest.TestCase):
@@ -188,6 +189,18 @@ class StoreTest(unittest.TestCase):
     ref = store.commit(value)
     packed = ref.pack(value)
     ref.verify(packed)
+
+  def test_packed_links(self):
+    """Tests links are properly tracked during packing."""
+    store = enact.Store()
+    with store:
+      x = enact.commit(1)
+      y = enact.commit(2.0)
+      r1 = SimpleResource(x, [{'test': (y, y)}])  # type: ignore
+      self.assertEqual(
+        enact.Ref.pack(r1).links,
+        {x.id: x.to_resource_dict(),
+         y.id: y.to_resource_dict()})
 
   def test_file_backend(self):
     """Tests the file backend."""
