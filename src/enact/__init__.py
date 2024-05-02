@@ -14,15 +14,22 @@
 
 """Top-level definitions."""
 
+# This must be imported first, as it sets up necessary global state.
+import enact.register_enact_distribution
+
+from enact.distribution_registry import register_distribution
+from enact.distribution_registry import get_path_distribution_info
+from enact.distribution_registry import get_distribution_info
+
 from enact.version import __version__
 from enact.function_wrappers import invoke
 from enact.function_wrappers import invoke_async
-
 from enact.resource_digests import resource_digest
 
 from enact.interfaces import FieldValue
 from enact.interfaces import ResourceDictValue
 from enact.interfaces import FieldTypeError
+from enact.interfaces import DistributionInfo
 from enact.interfaces import ResourceBase
 from enact.interfaces import TypeWrapperBase
 from enact.interfaces import ResourceDict
