@@ -15,6 +15,7 @@
 """Core resource interface."""
 
 import abc
+import dataclasses
 import functools
 import json
 from typing import (
@@ -95,6 +96,21 @@ class _AcyclicContext(contexts.Context):
       parent = parent.parent
 
 
+@dataclasses.dataclass
+class DistributionInfo:
+  """Information about a package where a resource is defined.
+
+  This information (together with qualified class names) is used to identify
+  compatible resources across different versions of a package.
+  """
+  name: str
+  version: str
+
+  def as_dict(self) -> Dict[str, Json]:
+    """Returns a dictionary representation of the distribution info."""
+    return dataclasses.asdict(self)  # type: ignore
+
+
 class ResourceBase:
   """Base class for resources.
 
@@ -109,11 +125,26 @@ class ResourceBase:
   In particular, this also means that resources may not mutually reference each
   other.
   """
+  _enact_distribution_info: Optional[DistributionInfo] = None
 
   @classmethod
   def type_descr(cls) -> Dict[str, Json]:
     """Returns a unique descriptor for the type."""
-    return {'name': f'{cls.__module__}.{cls.__qualname__}'}
+    result: Dict[str, Json] = {'name': f'{cls.__module__}.{cls.__qualname__}'}
+    pkg_info = cls.type_distribution_info()
+    if pkg_info is not None:
+      result['dist'] = pkg_info.as_dict()
+    return result
+
+  @classmethod
+  def type_distribution_info(cls) -> Optional[DistributionInfo]:
+    """Returns package information for the type if set."""
+    return cls._enact_distribution_info
+
+  @classmethod
+  def set_type_distribution_info(cls, info: DistributionInfo):
+    """Sets the package information for the type."""
+    cls._enact_distribution_info = info
 
   @classmethod
   @functools.lru_cache
