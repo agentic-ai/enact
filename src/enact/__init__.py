@@ -14,7 +14,7 @@
 
 """Top-level definitions."""
 
-from enact._version import __version__
+from enact.version import __version__
 from enact.function_wrappers import invoke
 from enact.function_wrappers import invoke_async
 
