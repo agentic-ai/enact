@@ -59,18 +59,6 @@ class ResourceTest(unittest.TestCase):
       list(r.field_items()),
       [('a', 1), ('b', 2), ('c', 3)])
 
-  def test_type_id_different_fields(self):
-    """Tests that the type id differs based on field."""
-    @dataclasses.dataclass
-    class R(enact.Resource):
-      a: Any
-    type_id = R.type_id()
-    # pylint: disable=function-redefined
-    @dataclasses.dataclass
-    class R(enact.Resource):  # type: ignore
-      b: Any
-    self.assertNotEqual(type_id, R.type_id())
-
   def test_type_id_same_fields(self):
     """Tests that the type id is correct."""
     @dataclasses.dataclass

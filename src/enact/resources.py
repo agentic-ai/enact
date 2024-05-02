@@ -16,9 +16,8 @@
 
 import abc
 import dataclasses
-from typing import Dict, Iterable, Mapping, Type, TypeVar
+from typing import Iterable, Mapping, Type, TypeVar
 
-from enact import digests
 from enact import interfaces
 from enact import resource_registry
 
@@ -30,14 +29,6 @@ C = TypeVar('C', bound='_Resource')
 
 class _Resource(interfaces.ResourceBase):
   """Base class for Resource and FrozenResource."""
-
-  @classmethod
-  def type_descr(cls) -> Dict[str, interfaces.Json]:
-    """Returns a unique identifier for the type."""
-    descr = super().type_descr()
-    assert isinstance(descr, dict)
-    descr['digest'] = digests.type_digest(cls)
-    return descr
 
   @classmethod
   def field_names(cls) -> Iterable[str]:
