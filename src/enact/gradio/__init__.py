@@ -15,7 +15,7 @@
 """Top-level gradio package definitions."""
 
 try:
-  import gradio
+  import gradio  # type: ignore
 except ModuleNotFoundError as e:
   raise ModuleNotFoundError(
       'Please install gradio to enable enact.gradio') from e

@@ -19,8 +19,9 @@ import contextvars
 from typing import Callable, Dict, Optional, Type, TypeVar, cast
 
 
-_context_vars: Dict[Type['Context'],
-                    contextvars.ContextVar[Optional['Context']]] = {}
+_context_vars: Dict[
+  Type['_ContextBase'],
+  contextvars.ContextVar[Optional['_ContextBase']]] = {}
 
 
 class ContextError(Exception):
@@ -169,7 +170,7 @@ class AsyncContext(_ContextBase):
     """Exits the context."""
     context_var = self._get_context_var()
     assert self._token
-    context_var.reset(self._token)
+    context_var.reset(self._token)  # type: ignore
     await self.aexit()
     self._token = None
 
@@ -185,7 +186,7 @@ def register(cls: Type[ContextBaseT]) -> Type[ContextBaseT]:
   """Registers a context class."""
   assert cls not in _context_vars, (
     f'Context class already registered: {cls}')
-  ctx_var: contextvars.ContextVar[Optional[Context]] = (
+  ctx_var: contextvars.ContextVar[Optional[_ContextBase]] = (
     contextvars.ContextVar(cls.__qualname__))
   ctx_var.set(None)
   _context_vars[cls] = ctx_var
