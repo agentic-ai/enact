@@ -666,13 +666,13 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
 
 class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   """Base class for sync / async invokable resources."""
-  _input_type: Optional[Type[I_contra]] = None
-  _output_type: Optional[Type[O_co]] = None
+  _enact_input_type: Optional[Type[I_contra]] = None
+  _enact_output_type: Optional[Type[O_co]] = None
 
   @classmethod
   def get_input_type(cls) -> Optional[Type[I_contra]]:
     """Returns the type of the input if known."""
-    return cls._input_type
+    return cls._enact_input_type
 
   def __call__(self, *args, **kwargs):
     """Subclasses implement this directly or as async."""
@@ -685,25 +685,27 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   @classmethod
   def _check_input_type(cls, value: Any):
     """Check the input type."""
-    input_type: Optional[Type] = cls._input_type
+    input_type: Optional[Type] = cls._enact_input_type
     # pylint: disable=isinstance-second-argument-not-valid-type
     if input_type and not isinstance(value, input_type):
       raise InvokableTypeError(
-        f'Input must be of type {cls._input_type}, but got {type(value)}.')
+        f'Input must be of type {cls._enact_input_type}, '
+        f'but got {type(value)}.')
 
   @classmethod
   def _check_output_type(cls, value: Any):
     """Check the output type."""
-    output_type: Optional[Type] = cls._output_type
+    output_type: Optional[Type] = cls._enact_output_type
     # pylint: disable=isinstance-second-argument-not-valid-type
     if output_type is not None and not isinstance(value, output_type):
       raise InvokableTypeError(
-        f'Output must be of type {cls._output_type}, but got {type(value)}.')
+        f'Output must be of type {cls._enact_output_type}, '
+        f'but got {type(value)}.')
 
   @classmethod
   def get_output_type(cls) -> Optional[Type[O_co]]:
     """Returns the type of the output if known."""
-    return cls._output_type
+    return cls._enact_output_type
 
   @staticmethod
   def _process_invoke_arg(
@@ -894,8 +896,8 @@ def typed_invokable(
     if not issubclass(cls, _InvokableBase):
       raise TypeError('Invokable must be a subclass of InvokableBase.')
     # pylint: disable=protected-access
-    cls._input_type = input_type
-    cls._output_type = output_type
+    cls._enact_input_type = input_type
+    cls._enact_output_type = output_type
     if register:
       resource_registry.register(cls)
     return cls
