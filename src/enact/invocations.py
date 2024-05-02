@@ -887,8 +887,7 @@ I = TypeVar('I', bound=_InvokableBase)
 
 def typed_invokable(
     input_type: Optional[Type],
-    output_type: Optional[Type],
-    register=True) -> Callable[
+    output_type: Optional[Type]) -> Callable[
       [Type[I]], Type[I]]:
   """A decorator for creating typed invokables."""
   def _decorator(cls: Type[I]) -> Type[I]:
@@ -898,8 +897,7 @@ def typed_invokable(
     # pylint: disable=protected-access
     cls._enact_input_type = input_type
     cls._enact_output_type = output_type
-    if register:
-      resource_registry.register(cls)
+    resource_registry.register(cls)
     return cls
   return _decorator
 
