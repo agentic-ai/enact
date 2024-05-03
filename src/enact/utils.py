@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, Optional
 
 from enact import interfaces
 from enact import resource_digests
+from enact import resource_registry
 
 # pylint: disable=invalid-name
 class cached_property(property):
@@ -60,3 +61,37 @@ def walk_resource_dict(
   elif isinstance(value, list):
     for v in value:
       yield from walk_resource_dict(v, include_self=True)
+
+
+def walk_resource(
+    value: Any,
+    include_self: bool = True) -> Iterable[interfaces.ResourceBase]:
+  """Recursively yields all sub-resources in depth-first order.
+
+  Will auto-wrap non-primitive python values.
+
+  Args:
+    value: The value to walk.
+    include_self: Whether to also yield 'value' if it is a resource dict.
+
+  Yields:
+    All instances of ResourceBase in the subtree defined by 'value' in
+    depth-first order.
+  """
+  if isinstance(value, dict):
+    for v in value.values():
+      yield from walk_resource(v, include_self=True)
+  elif isinstance(value, list):
+    for v in value:
+      yield from walk_resource(v, include_self=True)
+  elif isinstance(value, interfaces.PRIMITIVES):
+    pass
+  elif isinstance(value, type):
+    pass
+  else:
+    value = resource_registry.wrap(value)
+    if include_self:
+      yield value
+    assert isinstance(value, interfaces.ResourceBase)
+    for v in value.field_values():
+      yield from walk_resource(v, include_self=True)
