@@ -21,6 +21,10 @@ import unittest
 
 import enact
 from enact import resource_registry
+from enact import version
+
+import register_enact_distribution  # pylint: disable=unused-import
+
 
 @enact.register
 @dataclasses.dataclass
@@ -272,6 +276,23 @@ class RegistryTest(unittest.TestCase):
     self.assertIsNot(copy[0], nest[0])
     self.assertIsNot(copy[1], nest[1])
     self.assertIsNot(copy[1]['a'], nest[1]['a'])
+
+  def test_enact_types_have_distribution_info(self):
+    """Tests that type distribution info is present for enact types."""
+    self.assertEqual(
+      resource_registry.IntWrapper.type_distribution_info(),
+      enact.DistributionInfo(version.DIST_NAME, version.__version__))
+
+  def test_auto_assign_distribution_info(self):
+    """Tests that type distribution info is auto-assigned on register"""
+    class MyResource(enact.Resource):
+      pass
+    self.assertIsNone(MyResource.type_distribution_info())
+    enact.register(MyResource)
+    self.assertEqual(
+      MyResource.type_distribution_info(),
+      enact.DistributionInfo(
+        f'{version.PKG_NAME}-tests', version.__version__))
 
 
 if __name__ == 'main':
