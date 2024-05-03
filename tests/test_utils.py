@@ -73,8 +73,8 @@ class UtilsTest(unittest.TestCase):
       self.assertEqual(test_resource.value, 0)
       self.assertTrue(mock_getter.called)
 
-  def test_walk_resource_dict(self):
-    """Tests that walk resource dict works as expected."""
+  def test_walk_resource(self):
+    """Tests walk_resource and walk_resource_dict works as expected."""
     @enact.register
     @dataclasses.dataclass
     class TestResource(enact.Resource):
@@ -107,21 +107,27 @@ class UtilsTest(unittest.TestCase):
       [TestResource(1),
        TestResource(2),
        [1, 2, 3, 4],
-       Wrapped({'a': Wrapped(1)})]
+       Wrapped({'a': Wrapped(Wrapped)})]
     )
 
     result = list(
+      utils.walk_resource(test_instance))
+
+    dict_result = list(
       utils.walk_resource_dict(test_instance.to_resource_dict()))
 
     self.assertEqual(
       result,
       [
-        test_instance.to_resource_dict(),
-        TestResource(1).to_resource_dict(),
-        TestResource(2).to_resource_dict(),
-        Wrapper({'a': Wrapped(1)}).to_resource_dict(),
-        Wrapper(1).to_resource_dict()
+        test_instance,
+        TestResource(1),
+        TestResource(2),
+        Wrapper({'a': Wrapped(Wrapped)}),
+        Wrapper(Wrapped)
       ])
+    self.assertEqual(
+      [r.to_resource_dict() for r in result],
+      dict_result)
 
 
 if __name__ == '__main__':
