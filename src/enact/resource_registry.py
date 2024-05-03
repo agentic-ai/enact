@@ -20,8 +20,8 @@ from typing import (
   Any, Callable, Dict, Hashable, Iterable, Mapping, Optional, Set,
   Type, TypeVar, Union, cast)
 
-from enact import interfaces
 from enact import distribution_registry
+from enact import interfaces
 
 
 
@@ -311,9 +311,17 @@ class Registry:
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""
+    # Check argument type.
     if not issubclass(resource, interfaces.ResourceBase):
       raise RegistryError(
         f'Cannot register non-resource type: {resource}')
+    # Auto-add distribution info.
+    dist_info = resource.type_distribution_info()
+    if dist_info is None:
+      dist_info = distribution_registry.get_distribution_info(resource)
+      if dist_info is not None:
+        resource.set_type_distribution_info(dist_info)
+    # Record the type.
     type_id = resource.type_id()
     if (type_id in self._type_map and
         self._type_map[type_id] != resource and
@@ -325,6 +333,7 @@ class Registry:
         f'registered to a different type: '
         f'{self._type_map[type_id]}\n')
     self._type_map[type_id] = resource
+    # Handle special types.
     if issubclass(resource, interfaces.TypeWrapperBase):
       self._register_type_wrapper(resource)
     if issubclass(resource, FunctionWrapper):
