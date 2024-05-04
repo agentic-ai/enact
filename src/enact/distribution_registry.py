@@ -16,7 +16,7 @@
 from importlib import metadata
 import inspect
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from enact import interfaces
 
@@ -48,10 +48,15 @@ class DistributionRegistry:
     """Initialize a new package registry."""
     self._file_map: Dict[str, interfaces.DistributionInfo] = {}
     self._dir_map: Dict[str, interfaces.DistributionInfo] = {}
+    self._registered: Dict[str, interfaces.DistributionInfo] = {}
 
-  def register_dir(self, path: str, info: interfaces.DistributionInfo):
-    """Registers a directory to belong to a package."""
-    self._dir_map[path] = info
+  def registered(self) -> Iterable[interfaces.DistributionInfo]:
+    """Yield the registered packages."""
+    return self._registered.values()
+
+  def is_registered(self, dist_name: str) -> bool:
+    """Return whether the distribution is registered."""
+    return dist_name in self._registered
 
   def register_distribution(
       self,
@@ -93,6 +98,7 @@ class DistributionRegistry:
             f'dist_name')
           self._dir_map[path] = info
       self._file_map[file_path] = info
+    self._registered[dist_name] = info
 
   def get_path_distribution_info(self, path: str) -> (
       Optional[interfaces.DistributionInfo]):
