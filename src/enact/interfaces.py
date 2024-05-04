@@ -21,7 +21,7 @@ import json
 from typing import (
   Dict, Generic, Iterable, List, Optional, Tuple, Type, TypeVar, Union)
 
-from enact import contexts
+from enact import acyclic
 
 
 JsonLeaf = Union[int, float, str, bool, None]
@@ -70,30 +70,6 @@ class ImplementationMissing(FrameworkError):
 class FieldTypeError(FrameworkError):
   """Superclass for errors related to field types."""
 
-
-@contexts.register
-class _AcyclicContext(contexts.Context):
-  """Helper to safeguard against cyclic data-structures."""
-
-  def __init__(self, obj):
-    """Initializes the context."""
-    super().__init__()
-    self.parent: Optional[_AcyclicContext] = None
-    self.obj = obj
-
-  def enter(self):
-    """Check if the resource is already being committed."""
-    self.parent = _AcyclicContext.get_current()
-    parent = self.parent
-    parents: List[_AcyclicContext] = []
-    while parent is not None:
-      parents.append(parent)
-      if parent.obj is self.obj:
-        raise FieldTypeError(
-          f'Resources may not have cyclic graph structure. '
-          f'Encountered cycle: '
-          f'{" -> ".join(str(p.obj) for p in parents)}')
-      parent = parent.parent
 
 
 @dataclasses.dataclass
@@ -177,7 +153,7 @@ class ResourceBase:
   @staticmethod
   def _to_dict_value(value: FieldValue) -> ResourceDictValue:
     """Transforms a field value to a resource dict value."""
-    with _AcyclicContext(value):
+    with acyclic.AcyclicContext(value):
       if isinstance(value, ResourceBase):
         return value.to_resource_dict()
       if isinstance(value, PRIMITIVES):
