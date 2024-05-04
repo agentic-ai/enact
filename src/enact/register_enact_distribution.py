@@ -18,8 +18,13 @@ import os
 from enact import version
 from enact import distribution_registry
 
-# Register the current enact distribution.
-distribution_registry.register_distribution(
-  version.PKG_NAME,
-  version.__version__,
-  os.path.abspath(os.path.dirname(__file__)))
+def ensure_registered():
+  """Ensure the enact distribution is registered."""
+  # Register the current enact distribution.
+  registry = distribution_registry.registry()
+  if registry.is_registered(version.PKG_NAME):
+    return
+  distribution_registry.register_distribution(
+    version.PKG_NAME,
+    version.__version__,
+    os.path.abspath(os.path.dirname(__file__)))
