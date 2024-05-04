@@ -268,6 +268,7 @@ def _create_function_wrapper(fun: Callable) -> (
     generated_type.__name__ = fun.__name__
     generated_type.__qualname__ = fun.__qualname__
   function_wrapper_type.method_wrapper().__name__ += '__method_wrapper'
+  function_wrapper_type.method_wrapper().__qualname__ += '__method_wrapper'
   return function_wrapper_type
 
 
