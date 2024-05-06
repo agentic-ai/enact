@@ -28,6 +28,9 @@ from enact import interfaces
 WrappedT = TypeVar('WrappedT')
 WrapperT = TypeVar('WrapperT', bound=interfaces.TypeWrapperBase)
 
+FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
+FunctionWrapperT = TypeVar('FunctionWrapperT', bound='FunctionWrapper')
+MethodWrapperT = TypeVar('MethodWrapperT', bound='MethodWrapper')
 
 class RegistryError(Exception):
   """Raised when there is an error with the registry."""
@@ -35,172 +38,6 @@ class RegistryError(Exception):
 
 class ResourceNotFound(RegistryError):
   """Raised when a resource is not found."""
-
-
-
-FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
-
-
-class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
-  """Base class for field value wrappers."""
-  value: interfaces.FieldValue
-
-  def __init__(self, value: interfaces.FieldValue):
-    """Initializes a wrapped field value."""
-    self.value = value
-
-  @classmethod
-  def field_names(cls) -> Iterable[str]:
-    """Returns the names of the fields of the resource."""
-    return ('wrapped',)
-
-  def field_values(self) -> Iterable[interfaces.FieldValue]:
-    return (self.value,)
-
-  @classmethod
-  def from_fields(
-      cls: Type[FieldValueWrapperT],
-      field_dict: Mapping[str, interfaces.FieldValue]) -> FieldValueWrapperT:
-    assert len(field_dict) == 1
-    return cls(field_dict['wrapped'])
-
-  def set_from(self, other: interfaces.ResourceBase):
-    """Sets the fields of this resource from another resource."""
-    if not type(self) is type(other):
-      raise RegistryError(
-        f'Cannot set fields from {type(other)} to {type(self)}.')
-    assert isinstance(other, FieldValueWrapper)
-    self.wrapped = other.deepcopy_resource().value
-
-  @classmethod
-  def wrap(cls: Type[FieldValueWrapperT],
-           value: WrappedT) -> FieldValueWrapperT:
-    """Wrap a value directly."""
-    assert isinstance(value, cls.wrapped_type()), (
-      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
-    return cls(to_field_value(value))
-
-  def unwrap(self) -> WrappedT:
-    """Unwrap a value directly."""
-    assert isinstance(self.value, self.wrapped_type())
-    return from_field_value(self.value)
-
-
-class NoneWrapper(
-  interfaces.TypeWrapperBase):
-  """Wrapper for None."""
-  @classmethod
-  def wrapped_type(cls) -> Type[None]:
-    return type(None)
-
-  @classmethod
-  def field_names(cls) -> Iterable[str]:
-    """Returns the names of the fields of the resource."""
-    return ()
-
-  def field_values(self) -> Iterable[interfaces.FieldValue]:
-    return ()
-
-  @classmethod
-  def from_fields(
-      cls, field_dict: Mapping[str, interfaces.FieldValue]) -> 'NoneWrapper':
-    assert len(field_dict) == 0
-    return cls()
-
-  def set_from(self, other: interfaces.ResourceBase):
-    """Sets the fields of this resource from another resource."""
-    if not type(self) is type(other):
-      raise RegistryError(
-        f'Cannot set fields from {type(other)} to {type(self)}.')
-
-  @classmethod
-  def wrap(cls, value: WrappedT) -> 'NoneWrapper':
-    """Wrap a value directly."""
-    assert isinstance(value, cls.wrapped_type()), (
-      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
-    return NoneWrapper()
-
-  def unwrap(self) -> None:
-    """Unwrap a value directly."""
-    return None
-
-
-class PrimitiveWrapper(FieldValueWrapper[WrappedT]):
-  """Wrapper for primitives."""
-
-  @classmethod
-  def is_immutable(cls) -> bool:
-    return True
-
-
-class IntWrapper(PrimitiveWrapper[int]):
-  """Wrapper for ints."""
-  @classmethod
-  def wrapped_type(cls) -> Type[int]:
-    return int
-
-
-class FloatWrapper(PrimitiveWrapper[float]):
-  """Wrapper for floats."""
-  @classmethod
-  def wrapped_type(cls) -> Type[float]:
-    return float
-
-
-class BoolWrapper(PrimitiveWrapper[bool]):
-  """Wrapper for bools."""
-  @classmethod
-  def wrapped_type(cls) -> Type[bool]:
-    return bool
-
-
-class StrWrapper(PrimitiveWrapper[str]):
-  """Wrapper for strs."""
-  @classmethod
-  def wrapped_type(cls) -> Type[str]:
-    return str
-
-
-class BytesWrapper(PrimitiveWrapper[bytes]):
-  """Wrapper for bytes."""
-  @classmethod
-  def wrapped_type(cls) -> Type[bytes]:
-    return bytes
-
-
-class ListWrapper(FieldValueWrapper[list]):
-  """Wrapper for lists."""
-  @classmethod
-  def wrapped_type(cls) -> Type[list]:
-    return list
-
-  @classmethod
-  def set_wrapped_value(cls, target: list, src: list):
-    target.clear()
-    target.extend(src)
-
-
-class DictWrapper(FieldValueWrapper[dict]):
-  """Wrapper for dicts."""
-  @classmethod
-  def wrapped_type(cls) -> Type[dict]:
-    return dict
-
-  @classmethod
-  def set_wrapped_value(cls, target: dict, src: dict):
-    target.clear()
-    target.update(src)
-
-class ResourceTypeWrapper(FieldValueWrapper[type]):
-  """Wrapper for type-valued fields."""
-
-  @classmethod
-  def wrapped_type(cls) -> Type[type]:
-    return type
-
-
-FunctionWrapperT = TypeVar('FunctionWrapperT', bound='FunctionWrapper')
-MethodWrapperT = TypeVar('MethodWrapperT', bound='MethodWrapper')
 
 
 class FunctionWrapper(interfaces.ResourceBase):
@@ -274,7 +111,6 @@ class MethodWrapper(interfaces.ResourceBase):
     return self.instance  # type: ignore
 
 
-
 class MissingWrapperError(interfaces.FieldTypeError):
   """Raised when a required wrapper is missing."""
 
@@ -286,28 +122,19 @@ class Registry:
 
   def __init__(self):
     """Initializes a registry."""
+    # Ensure that the enact distribution is registered to its semantic version
+    # before registering any resource types.
+    distribution_registry.ensure_enact_registered()
     self.allow_reregistration = True
+
     # Map from type id to resource type.
     self._type_map: Dict[str, Type[interfaces.ResourceBase]] = {}
+
     # Map from python types to wrapper types.
     self._wrapped_types: Dict[Type, Type[interfaces.TypeWrapperBase]] = {}
     self._wrapper_types: Set[Type[interfaces.TypeWrapperBase]] = set()
     self._function_wrappers: Dict[Callable, Type[FunctionWrapper]] = {}
 
-    # Register basic wrappers for field values.
-    self.register(NoneWrapper)
-    self.register(IntWrapper)
-    self.register(FloatWrapper)
-    self.register(BoolWrapper)
-    self.register(StrWrapper)
-    self.register(BytesWrapper)
-    self.register(ListWrapper)
-    self.register(DictWrapper)
-    self.register(ResourceTypeWrapper)
-
-    # Ensure that the enact distribution is registered to its semantic version
-    # before registering any resource types.
-    distribution_registry.ensure_enact_registered()
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""
@@ -371,7 +198,7 @@ class Registry:
         found = v
     return found
 
-  def _get_function_wrapper_type(self, c: Callable) -> Type[FunctionWrapper]:
+  def _get_function_wrapper_type(self, c: Callable) -> Type['FunctionWrapper']:
     """Return the function wrapper for c or raise an error."""
     func = c
     if inspect.ismethod(c):
@@ -516,3 +343,169 @@ def from_field_value(value: interfaces.FieldValue) -> Any:
   if isinstance(value, dict):
     return {k: from_field_value(v) for k, v in value.items()}
   return value
+
+
+class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
+  """Base class for field value wrappers."""
+  value: interfaces.FieldValue
+
+  def __init__(self, value: interfaces.FieldValue):
+    """Initializes a wrapped field value."""
+    self.value = value
+
+  @classmethod
+  def field_names(cls) -> Iterable[str]:
+    """Returns the names of the fields of the resource."""
+    return ('wrapped',)
+
+  def field_values(self) -> Iterable[interfaces.FieldValue]:
+    return (self.value,)
+
+  @classmethod
+  def from_fields(
+      cls: Type[FieldValueWrapperT],
+      field_dict: Mapping[str, interfaces.FieldValue]) -> FieldValueWrapperT:
+    assert len(field_dict) == 1
+    return cls(field_dict['wrapped'])
+
+  def set_from(self, other: interfaces.ResourceBase):
+    """Sets the fields of this resource from another resource."""
+    if not type(self) is type(other):
+      raise RegistryError(
+        f'Cannot set fields from {type(other)} to {type(self)}.')
+    assert isinstance(other, FieldValueWrapper)
+    self.wrapped = other.deepcopy_resource().value
+
+  @classmethod
+  def wrap(cls: Type[FieldValueWrapperT],
+           value: WrappedT) -> FieldValueWrapperT:
+    """Wrap a value directly."""
+    assert isinstance(value, cls.wrapped_type()), (
+      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return cls(to_field_value(value))
+
+  def unwrap(self) -> WrappedT:
+    """Unwrap a value directly."""
+    assert isinstance(self.value, self.wrapped_type())
+    return from_field_value(self.value)
+
+
+@register
+class NoneWrapper(
+  interfaces.TypeWrapperBase):
+  """Wrapper for None."""
+  @classmethod
+  def wrapped_type(cls) -> Type[None]:
+    return type(None)
+
+  @classmethod
+  def field_names(cls) -> Iterable[str]:
+    """Returns the names of the fields of the resource."""
+    return ()
+
+  def field_values(self) -> Iterable[interfaces.FieldValue]:
+    return ()
+
+  @classmethod
+  def from_fields(
+      cls, field_dict: Mapping[str, interfaces.FieldValue]) -> 'NoneWrapper':
+    assert len(field_dict) == 0
+    return cls()
+
+  def set_from(self, other: interfaces.ResourceBase):
+    """Sets the fields of this resource from another resource."""
+    if not type(self) is type(other):
+      raise RegistryError(
+        f'Cannot set fields from {type(other)} to {type(self)}.')
+
+  @classmethod
+  def wrap(cls, value: WrappedT) -> 'NoneWrapper':
+    """Wrap a value directly."""
+    assert isinstance(value, cls.wrapped_type()), (
+      'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return NoneWrapper()
+
+  def unwrap(self) -> None:
+    """Unwrap a value directly."""
+    return None
+
+class PrimitiveWrapper(FieldValueWrapper[WrappedT]):
+  """Wrapper for primitives."""
+
+  @classmethod
+  def is_immutable(cls) -> bool:
+    return True
+
+
+@register
+class IntWrapper(PrimitiveWrapper[int]):
+  """Wrapper for ints."""
+  @classmethod
+  def wrapped_type(cls) -> Type[int]:
+    return int
+
+
+@register
+class FloatWrapper(PrimitiveWrapper[float]):
+  """Wrapper for floats."""
+  @classmethod
+  def wrapped_type(cls) -> Type[float]:
+    return float
+
+
+@register
+class BoolWrapper(PrimitiveWrapper[bool]):
+  """Wrapper for bools."""
+  @classmethod
+  def wrapped_type(cls) -> Type[bool]:
+    return bool
+
+
+@register
+class StrWrapper(PrimitiveWrapper[str]):
+  """Wrapper for strs."""
+  @classmethod
+  def wrapped_type(cls) -> Type[str]:
+    return str
+
+
+@register
+class BytesWrapper(PrimitiveWrapper[bytes]):
+  """Wrapper for bytes."""
+  @classmethod
+  def wrapped_type(cls) -> Type[bytes]:
+    return bytes
+
+
+@register
+class ListWrapper(FieldValueWrapper[list]):
+  """Wrapper for lists."""
+  @classmethod
+  def wrapped_type(cls) -> Type[list]:
+    return list
+
+  @classmethod
+  def set_wrapped_value(cls, target: list, src: list):
+    target.clear()
+    target.extend(src)
+
+
+@register
+class DictWrapper(FieldValueWrapper[dict]):
+  """Wrapper for dicts."""
+  @classmethod
+  def wrapped_type(cls) -> Type[dict]:
+    return dict
+
+  @classmethod
+  def set_wrapped_value(cls, target: dict, src: dict):
+    target.clear()
+    target.update(src)
+
+@register
+class ResourceTypeWrapper(FieldValueWrapper[type]):
+  """Wrapper for type-valued fields."""
+
+  @classmethod
+  def wrapped_type(cls) -> Type[type]:
+    return type
