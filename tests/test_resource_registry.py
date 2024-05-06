@@ -15,6 +15,7 @@
 """Tests for the resource_registry module."""
 
 import dataclasses
+import os
 import types
 from typing import Any, List, Tuple, Type
 import unittest
@@ -22,8 +23,7 @@ import unittest
 import enact
 from enact import resource_registry
 from enact import version
-
-import register_enact_distribution  # pylint: disable=unused-import
+from enact import distribution_registry
 
 
 @enact.register
@@ -285,14 +285,19 @@ class RegistryTest(unittest.TestCase):
 
   def test_auto_assign_distribution_info(self):
     """Tests that type distribution info is auto-assigned on register"""
+    distribution_registry.register_distribution(
+      f'{version.DIST_NAME}-tests', version.__version__,
+      os.path.abspath(os.path.dirname(__file__)))
+
     class MyResource(enact.Resource):
       pass
+
     self.assertIsNone(MyResource.type_distribution_info())
     enact.register(MyResource)
     self.assertEqual(
       MyResource.type_distribution_info(),
       enact.DistributionInfo(
-        f'{version.PKG_NAME}-tests', version.__version__))
+        f'{version.DIST_NAME}-tests', version.__version__))
 
 
 if __name__ == 'main':
