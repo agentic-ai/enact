@@ -23,7 +23,7 @@ import pickle
 
 from typing import (
   Any, Dict, Generic, Iterable, Iterator, Mapping, NamedTuple, Optional,
-  Type, TypeVar, cast)
+  Set, Type, TypeVar, cast)
 
 from enact import contexts
 from enact import digests
@@ -45,8 +45,8 @@ class PackedResource(NamedTuple):
   # A reference to the packed resource. The reference class must be compatible
   # with the packed resource, i.e., ref.verify(resource) must succeed.
   ref: 'Ref'
-  # The outgoing references as a dict from ref Id to reference dict.
-  links: Dict[str, interfaces.ResourceDict]
+  # The outgoing references as a set.
+  links: Set[str]
 
 
 P = TypeVar('P', bound='Ref')
@@ -102,7 +102,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   @classmethod
   def from_id(cls: Type[P], ref_id: str) -> P:
-    """Returns a string version of this reference."""
+    """Returns a reference from a reference ID."""
     try:
       return cls.from_resource_dict(
         interfaces.ResourceDict(cls, **json.loads(ref_id)))
@@ -176,12 +176,16 @@ class Ref(Generic[R], interfaces.ResourceBase):
   def pack(cls, resource: R) -> PackedResource:
     """Wraps and packs the resource."""
     as_resource = resource_registry.wrap(resource)
-    as_dict = as_resource.to_resource_dict()
+    # TODO: This should be improved since it walks the resource twice:
+    #   1. Once for walk_resource
+    #   2. Once for to_resource_dict.
+    # This will involve wrapping values twice when type_wrappers are involved.
+    # Maybe add a visitor interface to 'to_resource_dict' function, instead of
+    # using walk_resource.
     links = {
-      l.to_resource().id: l for l in utils.walk_resource_dict(as_dict)
-      if issubclass(l.type, Ref)}
+      l.id for l in utils.walk_resource(as_resource) if isinstance(l, Ref)}
     return PackedResource(
-      as_dict,
+      as_resource.to_resource_dict(),
       ref=cls.from_resource(as_resource),
       links=links)
 
@@ -223,8 +227,9 @@ class StorageBackend(abc.ABC):
     """Returns whether the storage backend has the resource."""
 
   @abc.abstractmethod
-  def checkout(self, ref: Ref) -> Optional[PackedResource]:
-    """Returns the packed resource or None if not available."""
+  def checkout(
+      self, refs: Iterable[Ref]) -> Dict[Ref, Optional[PackedResource]]:
+    """Returns a dictionary of resources or None if not available."""
 
 
 class NotFound(Exception):
@@ -247,9 +252,10 @@ class InMemoryBackend(StorageBackend):
     """Returns whether the backend has the referenced resource."""
     return ref.id in self._resources
 
-  def checkout(self, ref: Ref) -> Optional[PackedResource]:
-    """Returns the packed resource or None if not available."""
-    return self._resources.get(ref.id)
+  def checkout(self, refs: Iterable[Ref]) -> (
+      Dict[Ref, Optional[PackedResource]]):
+    """Returns a dictionary with resource data or None if not available."""
+    return {ref: self._resources.get(ref.id) for ref in refs}
 
   def __len__(self) -> int:
     """Returns the number of resources in the backend."""
@@ -263,7 +269,7 @@ class FileBackend(StorageBackend):
                root_dir: str,
                serializer: Optional[serialization.Serializer] = None,
                use_base64_names: bool=True):
-    """Create a new in-memory backend.
+    """Create a new file-backed backend.
 
     Args:
       root_dir: The directory where resources will be stored.
@@ -288,27 +294,27 @@ class FileBackend(StorageBackend):
     """Stores a packed resource."""
     packed_resource.ref.verify(packed_resource)
     data_bytes = self._serializer.serialize(packed_resource.data)
-    links_bytes = {l_id: self._serializer.serialize(l)
-                   for l_id, l in packed_resource.links.items()}
+    links = packed_resource.links
     with open(self._get_path(packed_resource.ref), 'wb') as file:
-      pickle.dump((data_bytes, links_bytes), file)
-
+      pickle.dump((data_bytes, links), file)
 
   def has(self, ref: Ref) -> bool:
     """Returns whether the backend has the referenced resource."""
     return os.path.exists(self._get_path(ref))
 
-  def checkout(self, ref: Ref) -> Optional[PackedResource]:
-    """Returns the packed resource or None if not available."""
+  def checkout(self, refs: Iterable[Ref]) -> (
+      Dict[Ref, Optional[PackedResource]]):
+    """Returns a dictionary with resource data or None if not available."""
+    return {ref: self._get_packed(ref) for ref in refs}
+
+  def _get_packed(self, ref: Ref) -> Optional[PackedResource]:
+    """Return the packed resource for a reference."""
     path = self._get_path(ref)
     if not os.path.exists(path):
       return None
     with open(self._get_path(ref), 'rb') as file:
-      data_bytes, links_bytes = pickle.load(file)
+      data_bytes, links = pickle.load(file)
     data: interfaces.ResourceDict = self._serializer.deserialize(data_bytes)
-    links: Dict[str, interfaces.ResourceDict] = {
-      ref_id: self._serializer.deserialize(link_bytes)
-      for ref_id, link_bytes in links_bytes.items()}
     return PackedResource(data, ref, links)
 
 
@@ -339,7 +345,7 @@ class Store(contexts.Context):
 
   def checkout(self, ref: Ref[R]) -> R:
     """Retrieves a resource from the store."""
-    packed_resource = self._backend.checkout(ref)
+    packed_resource = self._backend.checkout([ref])[ref]
     if packed_resource is None:
       raise NotFound(ref.id)
     if packed_resource.ref != ref:
