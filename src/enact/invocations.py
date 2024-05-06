@@ -306,7 +306,7 @@ class Invocation(Generic[I_contra, O_co], resources.Resource):
 
   def rewind(self, num_calls=1) -> 'Invocation[I_contra, O_co]':
     """Rewinds the invocation by the specified number of calls."""
-    invocation = self.deepcopy_resource()
+    invocation = resource_registry.deepcopy(self)
     with invocation.response.modify() as response:
       response.output = None
       for _ in range(num_calls):

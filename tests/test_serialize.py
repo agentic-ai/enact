@@ -56,7 +56,8 @@ class JsonSerializerTest(unittest.TestCase):
       r=enact.Ref('12314'), m={'a': ['test']}, l=[{'b': 1}, {'c': 2}],
       t=AllTypesResource)
     got = self.serializer.serialize(resource.to_resource_dict())
-    deserialized = self.serializer.deserialize(got).to_resource()
+    deserialized = resource_registry.from_resource_dict(
+      self.serializer.deserialize(got))
     self.assertEqual(deserialized, resource)
 
   def test_serialize_deserialize_fuzz(self):
@@ -65,5 +66,6 @@ class JsonSerializerTest(unittest.TestCase):
     for _ in range(100):
       resource = random_value.rand_resource()
       got = self.serializer.serialize(resource.to_resource_dict())
-      deserialized = self.serializer.deserialize(got).to_resource()
+      deserialized = resource_registry.from_resource_dict(
+        self.serializer.deserialize(got))
       self.assertEqual(deserialized, resource)

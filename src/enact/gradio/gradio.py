@@ -319,8 +319,7 @@ class JsonFieldWidget(EnactWidget):
     for field_name, value in zip(self._type.field_names(), component_values):
       json_val = json.loads(value)
       resource_dict[field_name] = self._serializer.from_json(json_val)
-    resource_type = resource_registry.wrap_type(self._type)
-    resource = resource_type.from_resource_dict(resource_dict)
+    resource = resource_registry.from_resource_dict(resource_dict)
     return resource_registry.unwrap(resource)
 
 

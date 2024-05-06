@@ -15,11 +15,11 @@
 """Core resource interface."""
 
 import abc
-import dataclasses
 import functools
 import json
 from typing import (
-  Dict, Generic, Iterable, List, Optional, Tuple, Type, TypeVar, Union)
+  Dict, Generic, Iterable, List, NamedTuple, Optional, Tuple, Type, TypeVar,
+  Union, cast)
 
 from enact import acyclic
 
@@ -71,9 +71,32 @@ class FieldTypeError(FrameworkError):
   """Superclass for errors related to field types."""
 
 
+class TypeInfo(NamedTuple):
+  """Information about a resource type."""
+  name: str
+  distribution_info: Optional['DistributionInfo']
 
-@dataclasses.dataclass
-class DistributionInfo:
+  def type_id(self) -> str:
+    """Returns a unique string identifier for the type."""
+    return json.dumps(self.as_dict(), sort_keys=True)
+
+  def as_dict(self) -> Dict[str, Json]:
+    """Returns a dictionary representation of the distribution info."""
+    dist_info = (
+      self.distribution_info.as_dict() if self.distribution_info else None)
+    return {
+      'name': self.name,
+      'distribution_info': dist_info}
+
+  @staticmethod
+  def from_dict(d: Dict[str, Json]) -> 'TypeInfo':
+    """Instantiate TypeInfo from a dictionary."""
+    r: Dict = dict(d)
+    r['distribution_info'] = DistributionInfo.from_dict(r['distribution_info'])
+    return TypeInfo(**r)
+
+
+class DistributionInfo(NamedTuple):
   """Information about a package where a resource is defined.
 
   This information (together with qualified class names) is used to identify
@@ -84,7 +107,12 @@ class DistributionInfo:
 
   def as_dict(self) -> Dict[str, Json]:
     """Returns a dictionary representation of the distribution info."""
-    return dataclasses.asdict(self)  # type: ignore
+    return {'name': self.name, 'version': self.version}
+
+  @staticmethod
+  def from_dict(d: Dict[str, Json]) -> 'DistributionInfo':
+    """Instantiate DistributionInfo from a dictionary."""
+    return DistributionInfo(**cast(Dict[str, str], d))
 
 
 class ResourceBase:
@@ -104,13 +132,11 @@ class ResourceBase:
   _enact_distribution_info: Optional[DistributionInfo] = None
 
   @classmethod
-  def type_descr(cls) -> Dict[str, Json]:
-    """Returns a unique descriptor for the type."""
-    result: Dict[str, Json] = {'name': f'{cls.__module__}.{cls.__qualname__}'}
-    pkg_info = cls.type_distribution_info()
-    if pkg_info is not None:
-      result['dist'] = pkg_info.as_dict()
-    return result
+  def type_info(cls) -> TypeInfo:
+    """Returns a descriptor for the type."""
+    return TypeInfo(
+      name=f'{cls.__module__}.{cls.__qualname__}',
+      distribution_info=cls.type_distribution_info())
 
   @classmethod
   def type_distribution_info(cls) -> Optional[DistributionInfo]:
@@ -126,7 +152,7 @@ class ResourceBase:
   @functools.lru_cache
   def type_id(cls) -> str:
     """Returns a string descriptor of the type."""
-    return json.dumps(cls.type_descr(), sort_keys=True)
+    return cls.type_info().type_id()
 
   @classmethod
   @abc.abstractmethod
@@ -174,51 +200,12 @@ class ResourceBase:
       raise FieldTypeError(
         f'Encountered unsupported field type {type(value)}: {value}')
 
-  @staticmethod
-  def _from_dict_value(value: ResourceDictValue) -> FieldValue:
-    """Transforms a resource dict value to a field value."""
-    if isinstance(value, PRIMITIVES):
-      return value
-    if isinstance(value, type) and issubclass(value, ResourceBase):
-      return value
-    if isinstance(value, List):
-      return [ResourceBase._from_dict_value(x) for x in value]
-    if isinstance(value, ResourceDict):
-      return value.type.from_resource_dict(value)
-    if isinstance(value, Dict):
-      def _assert_str(maybe_str: str) -> str:
-        if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
-          raise FieldTypeError(
-            f'Expected string key, got {type(maybe_str)}')
-        return maybe_str
-      return {
-        _assert_str(k): ResourceBase._from_dict_value(v)
-        for k, v in value.items()}
-    raise FieldTypeError(
-      f'Encountered unsupported resource '
-      f'dict value type {type(value)}: {value}')
-
-  def deepcopy_resource(self: C) -> C:
-    """Create a deep-copy of the resource."""
-    return self.from_resource_dict(self.to_resource_dict())
-
   def to_resource_dict(self: C) -> 'ResourceDict[C]':
     """Returns a ResourceDict dictionary representation."""
     result = ResourceDict(type(self))
     for field_name, value in self.field_items():
       result[field_name] = ResourceBase._to_dict_value(value)
     return result
-
-  @classmethod
-  def from_resource_dict(cls: Type[C], resorce_dict: 'ResourceDict') -> C:
-    """Constructs the resource from a ResourceDict dictionary."""
-    if not issubclass(resorce_dict.type, cls):
-      raise ResourceError(
-        f'Expected resource of type {cls}, got {resorce_dict.type}')
-    field_dict = {
-      k: ResourceBase._from_dict_value(v)
-      for k, v in resorce_dict.items()}
-    return cls.from_fields(field_dict)
 
   def set_from(self, other: 'ResourceBase'):
     """Sets the fields of this resource from another resource.
@@ -236,15 +223,14 @@ class ResourceBase:
 
 
 class ResourceDict(Generic[C], Dict[str, ResourceDictValue]):
-  """A dictionary representing a resource with attached type info."""
+  """A dictionary representing a resource with attached TypeInfo."""
 
-  def __init__(self, resource_type: Type[C], *args, **kwargs):
+  def __init__(
+      self, resource_type: Union[Type[C], TypeInfo], *args, **kwargs):
     super().__init__(*args, **kwargs)
-    self.type = resource_type
-
-  def to_resource(self) -> C:
-    """Constructs the resource from the dictionary."""
-    return self.type.from_resource_dict(self)
+    if not isinstance(resource_type, TypeInfo):
+      resource_type = resource_type.type_info()
+    self.type_info = resource_type
 
 
 WrappedT = TypeVar('WrappedT')

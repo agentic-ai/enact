@@ -81,6 +81,7 @@ from enact.resource_registry import RegistryError
 from enact.resource_registry import ResourceNotFound
 from enact.resource_registry import wrap
 from enact.resource_registry import unwrap
+from enact.resource_registry import deepcopy
 
 # Trigger registration of standard resource wrappers.
 import enact.type_wrappers

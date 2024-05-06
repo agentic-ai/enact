@@ -69,7 +69,7 @@ class JsonSerializer(Serializer):
     """Converts a value to a JSON compatible value recursively."""
     if isinstance(value, interfaces.ResourceDict):
       result: Dict[str, Json] = {
-        self._escape('res'): (value.type.type_id())}
+        self._escape('res'): (value.type_info.type_id())}
       for k, v in value.items():
         if not isinstance(k, str):
           raise interfaces.FieldTypeError(

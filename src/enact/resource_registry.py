@@ -17,7 +17,7 @@
 import inspect
 import types
 from typing import (
-  Any, Callable, Dict, Hashable, Iterable, Mapping, Optional, Set,
+  Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Set,
   Type, TypeVar, Union, cast)
 
 from enact import distribution_registry
@@ -27,6 +27,7 @@ from enact import interfaces
 
 WrappedT = TypeVar('WrappedT')
 WrapperT = TypeVar('WrapperT', bound=interfaces.TypeWrapperBase)
+ResourceT = TypeVar('ResourceT', bound=interfaces.ResourceBase)
 
 FieldValueWrapperT = TypeVar('FieldValueWrapperT', bound='FieldValueWrapper')
 FunctionWrapperT = TypeVar('FunctionWrapperT', bound='FunctionWrapper')
@@ -136,6 +137,43 @@ class Registry:
     self._function_wrappers: Dict[Callable, Type[FunctionWrapper]] = {}
 
 
+  def _from_dict_value(self, value: interfaces.ResourceDictValue) -> (
+      interfaces.FieldValue):
+    """Transforms a resource dict value to a field value."""
+    if isinstance(value, interfaces.PRIMITIVES):
+      return value
+    if isinstance(value, type) and issubclass(value, interfaces.ResourceBase):
+      return value
+    if isinstance(value, List):
+      return [self._from_dict_value(x) for x in value]
+    if isinstance(value, interfaces.ResourceDict):
+      return self.from_resource_dict(value)
+    if isinstance(value, Dict):
+      def _assert_str(maybe_str: str) -> str:
+        if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
+          raise interfaces.FieldTypeError(
+            f'Expected string key, got {type(maybe_str)}')
+        return maybe_str
+      return {
+        _assert_str(k): self._from_dict_value(v)
+        for k, v in value.items()}
+    raise interfaces.FieldTypeError(
+      f'Encountered unsupported resource '
+      f'dict value type {type(value)}: {value}')
+
+  def deepcopy(self, resource: ResourceT) -> ResourceT:
+    """Create a deep-copy of the resource."""
+    return cast(ResourceT, self.from_resource_dict(resource.to_resource_dict()))
+
+  def from_resource_dict(self, resource_dict: interfaces.ResourceDict) -> (
+      interfaces.ResourceBase):
+    """Constructs the resource from a ResourceDict dictionary."""
+    resource_type = self.lookup(resource_dict.type_info)
+    field_dict = {
+      k: self._from_dict_value(v)
+      for k, v in resource_dict.items()}
+    return resource_type.from_fields(field_dict)
+
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""
     # Check argument type.
@@ -166,8 +204,11 @@ class Registry:
     if issubclass(resource, FunctionWrapper):
       return self._register_function_wrapper(resource)
 
-  def lookup(self, type_id: str) -> Type[interfaces.ResourceBase]:
-    """Looks up a resource type by name."""
+  def lookup(self, type_id: Union[str, interfaces.TypeInfo]) -> (
+      Type[interfaces.ResourceBase]):
+    """Looks up a resource type by name or type_info."""
+    if isinstance(type_id, interfaces.TypeInfo):
+      type_id = type_id.type_id()
     resource_class = self._type_map.get(type_id)
     if not resource_class:
       raise ResourceNotFound(f'No type registered for {type_id}')
@@ -267,9 +308,6 @@ class Registry:
     return cls._singleton
 
 
-ResourceT = TypeVar('ResourceT', bound=interfaces.ResourceBase)
-
-
 def register(cls: Type[ResourceT]) -> Type[ResourceT]:
   """Decorator for resource classes."""
   Registry.get().register(cls)
@@ -305,7 +343,11 @@ def unwrap_type(value: Type[interfaces.ResourceBase]) -> Type:
 
 def deepcopy(value: WrappedT) -> WrappedT:
   """Deep copy a value."""
-  return from_field_value(to_field_value(value))
+  if isinstance(value, interfaces.ResourceBase):
+    result = from_resource_dict(value.to_resource_dict())
+  else:
+    result = unwrap(from_resource_dict(wrap(value).to_resource_dict()))
+  return cast(WrappedT, result)
 
 
 def _ensure_str_key(s: Any) -> str:
@@ -344,6 +386,11 @@ def from_field_value(value: interfaces.FieldValue) -> Any:
     return {k: from_field_value(v) for k, v in value.items()}
   return value
 
+def from_resource_dict(resource_dict: interfaces.ResourceDict) -> (
+    interfaces.ResourceBase):
+  """Constructs the resource from a ResourceDict dictionary."""
+  return Registry.get().from_resource_dict(resource_dict)
+
 
 class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
   """Base class for field value wrappers."""
@@ -374,7 +421,7 @@ class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
       raise RegistryError(
         f'Cannot set fields from {type(other)} to {type(self)}.')
     assert isinstance(other, FieldValueWrapper)
-    self.wrapped = other.deepcopy_resource().value
+    self.wrapped = deepcopy(other).value
 
   @classmethod
   def wrap(cls: Type[FieldValueWrapperT],

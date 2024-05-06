@@ -104,8 +104,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
   def from_id(cls: Type[P], ref_id: str) -> P:
     """Returns a reference from a reference ID."""
     try:
-      return cls.from_resource_dict(
-        interfaces.ResourceDict(cls, **json.loads(ref_id)))
+      return cast(P, resource_registry.from_resource_dict(
+        interfaces.ResourceDict(cls, **json.loads(ref_id))))
     except json.JSONDecodeError as error:
       raise RefError(f'Invalid ref id: {ref_id}') from error
 
@@ -170,7 +170,9 @@ class Ref(Generic[R], interfaces.ResourceBase):
         f'Reference type mismatch: {packed_resource.ref} is not a {cls}.')
     cls.verify(packed_resource)
     return cast(
-      R, resource_registry.unwrap(packed_resource.data.to_resource()))
+      R,
+      resource_registry.unwrap(
+        resource_registry.from_resource_dict(packed_resource.data)))
 
   @classmethod
   def pack(cls, resource: R) -> PackedResource:

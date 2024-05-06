@@ -20,8 +20,10 @@ from typing import Any, Type
 import unittest
 
 import enact
+from enact import resource_registry
 
 
+@enact.register
 @dataclasses.dataclass
 class SimpleResource(enact.Resource):
   a: Any
@@ -29,6 +31,7 @@ class SimpleResource(enact.Resource):
   c: Any
 
 
+@enact.register
 @dataclasses.dataclass
 class OtherSimpleResource(enact.Resource):
   a: Any
@@ -105,8 +108,8 @@ class ResourceTest(unittest.TestCase):
     as_dict = r.to_resource_dict()
     w_dict = as_dict['w']
     assert isinstance(w_dict, enact.ResourceDict)
-    self.assertEqual(w_dict.type, CustomWrapper)
-    rebuilt = as_dict.to_resource()
+    self.assertEqual(w_dict.type_info, CustomWrapper.type_info())
+    rebuilt = resource_registry.from_resource_dict(as_dict)
     self.assertEqual(r.w.x, rebuilt.w.x)
     self.assertEqual(r.i, rebuilt.i)
 
@@ -163,11 +166,11 @@ class RefTest(unittest.TestCase):
     with self.assertRaises(enact.FieldTypeError):
       enact.Ref.pack(a)
 
-  def test_deepy_copy_resource(self):
+  def test_deep_copy_resource(self):
     """Tests that the resource can be deep-copied."""
     a = SimpleResource(SimpleResource(1, 2, 3), [4, None],
                        {'a': 0.0, 'b': [True, False]})
-    b = a.deepcopy_resource()
+    b = enact.deepcopy(a)
     self.assertEqual(a, b)
     self.assertNotEqual(id(a), id(b))
     self.assertNotEqual(id(a.a), id(b.a))

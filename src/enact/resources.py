@@ -65,7 +65,7 @@ class Resource(_Resource):
     """
     if not type(self) == type(other):  # pylint: disable=unidiomatic-typecheck
       raise TypeError(f'Cannot set_from {type(other)} into {type(self)}.')
-    copy = other.deepcopy_resource()
+    copy = resource_registry.deepcopy(other)
     for field in dataclasses.fields(self):
       self_field = getattr(self, field.name)
       target = getattr(other, field.name)

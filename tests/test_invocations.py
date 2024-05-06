@@ -19,13 +19,14 @@ import dataclasses
 import random
 import tempfile
 import time
-from typing import Optional, cast
+from typing import Any, Optional, cast
 import unittest
 from unittest import mock
 
 import enact
 from enact import invocations
 
+@enact.register
 class ValueErrorResource(invocations.ExceptionResource):
   """A value error that is also a resource."""
 
@@ -47,8 +48,8 @@ class WrongOutputType(enact.Invokable):
     return value  # type: ignore
 
 
-@dataclasses.dataclass
 @enact.typed_invokable(int, int)
+@dataclasses.dataclass
 class AddOne(enact.Invokable):
   fail: bool = False
   def call(self, input_resource: int) -> int:
@@ -57,9 +58,10 @@ class AddOne(enact.Invokable):
     return input_resource + 1
 
 
+@enact.register
 @dataclasses.dataclass
 class Fail(enact.Invokable):
-  def call(self, arg: enact.ResourceBase) -> int:
+  def call(self, arg: Any) -> int:
     raise ValueErrorResource('fail')
 
 
@@ -307,36 +309,45 @@ class InvocationsTest(unittest.TestCase):
   def test_no_reraise_in_replay(self):
     """Tests that exceptions are replayed."""
     native_errors_raised = 0
+    @enact.register
     class PythonErrorOnInvoke(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
         nonlocal native_errors_raised
         native_errors_raised += 1
         raise ValueErrorResource('foo')
 
+    @enact.register
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
       invokable: enact.Ref[enact.InvokableBase]
       def call(self, input_resource: enact.ResourceBase):
         self.invokable.checkout()(input_resource)
 
+    @enact.register
+    @dataclasses.dataclass
+    class MyResource(enact.Resource):
+      value: int
+
     with self.store as store:
       error_fun = PythonErrorOnInvoke()
       subcall_1 = SubCall(store.commit(error_fun))
       subcall_2 = SubCall(store.commit(subcall_1))
-      invocation = subcall_2.invoke(store.commit(5))
+      invocation = subcall_2.invoke(store.commit(MyResource(5)))
       self.assertEqual(native_errors_raised, 1)
       with self.assertRaises(ValueErrorResource):
         with invocations.ReplayContext(subinvocations=[
             enact.commit(invocation)]):
-          subcall_2(5)
+          subcall_2(MyResource(5))
       self.assertEqual(native_errors_raised, 2)
 
 
   def test_input_changed_error(self):
+    @enact.register
     @dataclasses.dataclass
     class Changeable(enact.Resource):
       x: int = 0
 
+    @enact.register
     class ChangesInput(enact.Invokable):
       def call(self, input_resource: Changeable):
         input_resource.x += 1
