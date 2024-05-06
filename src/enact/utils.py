@@ -14,6 +14,7 @@
 """Utility functions and classes."""
 from typing import Any, Dict, Iterable, Optional
 
+from enact import acyclic
 from enact import interfaces
 from enact import resource_digests
 from enact import resource_registry
@@ -53,14 +54,15 @@ def walk_resource_dict(
     All instances of ResourceDict in the subtree defined by 'value' in
     depth-first order.
   """
-  if isinstance(value, interfaces.ResourceDict) and include_self:
-    yield value
-  if isinstance(value, dict):  # Both normal dicts and resource dicts.
-    for v in value.values():
-      yield from walk_resource_dict(v, include_self=True)
-  elif isinstance(value, list):
-    for v in value:
-      yield from walk_resource_dict(v, include_self=True)
+  with acyclic.AcyclicContext(value):
+    if isinstance(value, interfaces.ResourceDict) and include_self:
+      yield value
+    if isinstance(value, dict):  # Both normal dicts and resource dicts.
+      for v in value.values():
+        yield from walk_resource_dict(v, include_self=True)
+    elif isinstance(value, list):
+      for v in value:
+        yield from walk_resource_dict(v, include_self=True)
 
 
 def walk_resource(
@@ -78,20 +80,21 @@ def walk_resource(
     All instances of ResourceBase in the subtree defined by 'value' in
     depth-first order.
   """
-  if isinstance(value, dict):
-    for v in value.values():
-      yield from walk_resource(v, include_self=True)
-  elif isinstance(value, list):
-    for v in value:
-      yield from walk_resource(v, include_self=True)
-  elif isinstance(value, interfaces.PRIMITIVES):
-    pass
-  elif isinstance(value, type):
-    pass
-  else:
-    value = resource_registry.wrap(value)
-    if include_self:
-      yield value
-    assert isinstance(value, interfaces.ResourceBase)
-    for v in value.field_values():
-      yield from walk_resource(v, include_self=True)
+  with acyclic.AcyclicContext(value):
+    if isinstance(value, dict):
+      for v in value.values():
+        yield from walk_resource(v, include_self=True)
+    elif isinstance(value, list):
+      for v in value:
+        yield from walk_resource(v, include_self=True)
+    elif isinstance(value, interfaces.PRIMITIVES):
+      pass
+    elif isinstance(value, type):
+      pass
+    else:
+      value = resource_registry.wrap(value)
+      if include_self:
+        yield value
+      assert isinstance(value, interfaces.ResourceBase)
+      for v in value.field_values():
+        yield from walk_resource(v, include_self=True)
