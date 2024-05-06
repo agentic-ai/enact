@@ -19,6 +19,7 @@ import os
 from typing import Any, Dict, Iterable, List, Optional
 
 from enact import interfaces
+from enact import version
 
 
 _singleton: Optional['DistributionRegistry'] = None
@@ -149,3 +150,13 @@ def get_distribution_info(python_obj: Any) -> (
     Optional[interfaces.DistributionInfo]):
   """Get the distribution info for a given python type if it exists."""
   return registry().get_distribution_info(python_obj)
+
+def ensure_enact_registered():
+  """Ensure the enact distribution is registered."""
+  # Register the current enact distribution.
+  if registry().is_registered(version.DIST_NAME):
+    return
+  register_distribution(
+    version.DIST_NAME,
+    version.__version__,
+    version.DIST_PYTHON_DIR)
