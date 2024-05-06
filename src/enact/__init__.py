@@ -14,11 +14,6 @@
 
 """Top-level definitions."""
 
-import enact.register_enact_distribution
-# Before any enact built-in resources are registered to the resource_registry,
-# we need to ensure that the enact python distribution is registered so that the
-# appropriate DistributionInfo objects are available.
-enact.register_enact_distribution.ensure_registered()
 
 # pylint: disable=wrong-import-position
 from enact.distribution_registry import register_distribution

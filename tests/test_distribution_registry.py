@@ -55,15 +55,15 @@ class DistributionRegistryTest(unittest.TestCase):
   def test_register_editable_install(self):
     """Tests that editable installs can be registered."""
     # Check if enact is installed in editable mode.
-    if (not _has_distribution(version.PKG_NAME)
-        or not _is_editable_distribution(version.PKG_NAME)):
+    if (not _has_distribution(version.DIST_NAME)
+        or not _is_editable_distribution(version.DIST_NAME)):
       self.skipTest('enact is not installed in editable mode')
 
     d = distribution_registry.DistributionRegistry()
-    d.register_distribution(version.PKG_NAME)
+    d.register_distribution(version.DIST_NAME)
     self.assertEqual(
       d.get_distribution_info(enact.ResourceBase),
-      enact.DistributionInfo(version.PKG_NAME, version.__version__))
+      enact.DistributionInfo(version.DIST_NAME, version.__version__))
 
   def test_register_non_editable_install(self):
     """Tests that editable installs can be registered."""

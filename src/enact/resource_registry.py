@@ -21,6 +21,9 @@ from typing import (
   Type, TypeVar, Union, cast)
 
 from enact import interfaces
+from enact import distribution_registry
+
+
 
 WrappedT = TypeVar('WrappedT')
 WrapperT = TypeVar('WrapperT', bound=interfaces.TypeWrapperBase)
@@ -301,6 +304,10 @@ class Registry:
     self.register(ListWrapper)
     self.register(DictWrapper)
     self.register(ResourceTypeWrapper)
+
+    # Ensure that the enact distribution is registered to its semantic version
+    # before registering any resource types.
+    distribution_registry.ensure_enact_registered()
 
   def register(self, resource: Type[interfaces.ResourceBase]):
     """Registers the resource type."""
