@@ -24,6 +24,7 @@ from enact import references
 from enact import serialization
 from enact import contexts
 from enact import resource_registry
+from enact import acyclic
 
 # pylint: disable=invalid-name,missing-class-docstring
 
@@ -53,12 +54,12 @@ class JsonPackedRef(enact.Ref):
       interfaces.ResourceBase):
     """Unpacks the referenced resource."""
     data = packed_resource.data
-    if not issubclass(data.type, JsonPackedResource):
+    if data.type_info != JsonPackedResource.type_info():
       raise enact.RefError('Resource is not a JsonPackedResource.')
-    json_packed = data.type.from_resource_dict(data)
+    json_packed: JsonPackedResource = resource_registry.from_resource_dict(data)
     unpacked_dict = serialization.JsonSerializer().deserialize(
       json_packed.contents)
-    return unpacked_dict.to_resource()
+    return resource_registry.from_resource_dict(unpacked_dict)
 
   @classmethod
   def pack(cls, resource: interfaces.ResourceBase) -> references.PackedResource:
@@ -67,7 +68,7 @@ class JsonPackedRef(enact.Ref):
       JsonPackedResource(serialization.JsonSerializer().serialize(
         resource.to_resource_dict())).to_resource_dict(),
       ref=cls.from_resource(resource),
-      links=set())
+      links={})
 
 
 class RefTest(unittest.TestCase):
@@ -105,7 +106,7 @@ class RefTest(unittest.TestCase):
     value = 1
     packed = enact.Ref.pack(value)
     self.assertIsInstance(
-      packed.data.to_resource(),
+      resource_registry.from_resource_dict(packed.data),
       resource_registry.IntWrapper)
     packed.ref.verify(packed)
     self.assertEqual(packed.ref.unpack(packed), 1)
@@ -176,7 +177,7 @@ class StoreTest(unittest.TestCase):
     store = enact.Store()
     with store:
       ref = store.commit([0, 1, 2])
-      old_ref = ref.deepcopy_resource()
+      old_ref = enact.deepcopy(ref)
       with ref.modify() as elems:
         elems.append(3)
       self.assertEqual(ref.checkout(), [0, 1, 2, 3])
@@ -197,10 +198,9 @@ class StoreTest(unittest.TestCase):
       x = enact.commit(1)
       y = enact.commit(2.0)
       r1 = SimpleResource(x, [{'test': (y, y)}])  # type: ignore
-      self.assertEqual(
-        enact.Ref.pack(r1).links,
-        {x.id: x.to_resource_dict(),
-         y.id: y.to_resource_dict()})
+      got = enact.Ref.pack(r1).links
+      want = {x.id, y.id}
+      self.assertEqual(got, want)
 
   def test_file_backend(self):
     """Tests the file backend."""
@@ -220,5 +220,5 @@ class StoreTest(unittest.TestCase):
       r2.x = r1  # type: ignore
 
       with enact.Store(backend=enact.FileBackend(tmpdir)):
-        with self.assertRaises(interfaces.FieldTypeError):
+        with self.assertRaises(acyclic.CycleDetected):
           enact.commit(r1)

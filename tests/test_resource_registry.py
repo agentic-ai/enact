@@ -19,6 +19,7 @@ import os
 import types
 from typing import Any, List, Tuple, Type
 import unittest
+from unittest import mock
 
 import enact
 from enact import resource_registry
@@ -285,19 +286,20 @@ class RegistryTest(unittest.TestCase):
 
   def test_auto_assign_distribution_info(self):
     """Tests that type distribution info is auto-assigned on register"""
-    distribution_registry.register_distribution(
-      f'{version.DIST_NAME}-tests', version.__version__,
-      os.path.abspath(os.path.dirname(__file__)))
+    dist_registry = distribution_registry.DistributionRegistry()
 
-    class MyResource(enact.Resource):
-      pass
-
-    self.assertIsNone(MyResource.type_distribution_info())
-    enact.register(MyResource)
-    self.assertEqual(
-      MyResource.type_distribution_info(),
-      enact.DistributionInfo(
-        f'{version.DIST_NAME}-tests', version.__version__))
+    # Patch out the singleton distribution registry.
+    with mock.patch.object(
+        distribution_registry, 'registry',  lambda: dist_registry):
+      dist_registry.register_distribution(
+        'enact-tests', '0.0.1', os.path.dirname(__file__))
+      class MyResource(enact.Resource):
+        pass
+      self.assertIsNone(MyResource.type_distribution_info())
+      enact.register(MyResource)
+      self.assertEqual(
+        MyResource.type_distribution_info(),
+        enact.DistributionInfo('enact-tests', '0.0.1'))
 
 
 if __name__ == 'main':

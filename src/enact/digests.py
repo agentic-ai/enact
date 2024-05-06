@@ -54,15 +54,15 @@ def _digest(
                         interfaces.ResourceDict)):
     items: Iterable[Tuple[str, Value]]
     if isinstance(value, interfaces.ResourceBase):
-      res_type = type(value)
+      type_id = type(value).type_id()
       # Use alphabetical ordering.
       items = sorted(value.field_items(), key=lambda x: x[0])
     else:
       assert isinstance(value, interfaces.ResourceDict)
-      res_type = value.type
+      type_id = value.type_info.type_id()
       items = sorted(value.items(), key=lambda x: x[0])
     hash_obj.update(b'res[')
-    hash_obj.update(res_type.type_id().encode('utf-8'))
+    hash_obj.update(type_id.encode('utf-8'))
     for k, v in items:
       hash_obj.update(repr(k).encode('utf-8'))
       _digest(v, hash_obj, stack)
