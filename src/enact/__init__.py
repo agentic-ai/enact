@@ -14,8 +14,6 @@
 
 """Top-level definitions."""
 
-
-# pylint: disable=wrong-import-position
 from enact.distribution_registry import register_distribution
 from enact.distribution_registry import get_path_distribution_info
 from enact.distribution_registry import get_distribution_info
