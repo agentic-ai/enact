@@ -168,6 +168,8 @@ class Registry:
   def from_resource_dict(self, resource_dict: interfaces.ResourceDict) -> (
       interfaces.ResourceBase):
     """Constructs the resource from a ResourceDict dictionary."""
+    if not isinstance(resource_dict, interfaces.ResourceDict):
+      raise TypeError(f'Input is not a ResourceDict: {resource_dict}')
     resource_type = self.lookup(resource_dict.type_info)
     field_dict = {
       k: self._from_dict_value(v)
@@ -283,7 +285,7 @@ class Registry:
       f'Cannot wrap type {value}. Please register '
       f'a TypeWrapper for this type.')
 
-  def unwrap(self, value: interfaces.ResourceBase) -> Any:
+  def unwrap(self, value: Any) -> Any:
     """Unwrap a value if wrapped."""
     if isinstance(value, interfaces.TypeWrapperBase):
       return value.unwrap()
@@ -322,12 +324,12 @@ def register_wrapper(cls: Type[WrapperT]) -> Type[WrapperT]:
 
 
 def wrap(value: Any) -> interfaces.ResourceBase:
-  """Wrap a value as a resource."""
+  """Wrap a value as a resource if necessary."""
   return Registry.get().wrap(value)
 
 
-def unwrap(value: interfaces.ResourceBase) -> Any:
-  """Wrap a value."""
+def unwrap(value: Any) -> Any:
+  """Unwrap a value if wrapped."""
   return Registry.get().unwrap(value)
 
 
