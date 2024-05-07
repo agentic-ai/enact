@@ -64,10 +64,11 @@ class JsonPackedRef(enact.Ref):
   @classmethod
   def pack(cls, resource: interfaces.ResourceBase) -> references.PackedResource:
     """Packs the resource."""
-    return references.PackedResource(
+    ref = cls.from_resource(resource)
+    return ref, references.PackedResource(
       JsonPackedResource(serialization.JsonSerializer().serialize(
         resource.to_resource_dict())).to_resource_dict(),
-      ref=cls.from_resource(resource),
+      ref_dict=ref.to_resource_dict(),
       links={})
 
 
@@ -77,17 +78,19 @@ class RefTest(unittest.TestCase):
   def test_verify_pack_unpack(self):
     """Test that packing and unpacking works."""
     resource = SimpleResource(x=1, y=2.0)
-    packed = enact.Ref.pack(resource)
-    packed.ref.verify(packed)
-    unpacked = packed.ref.unpack(packed)
+    ref, packed = enact.Ref.pack(resource)
+    packed.ref().verify(packed.data)
+    self.assertEqual(ref, packed.ref())
+    unpacked = packed.ref().unpack(packed)
     self.assertEqual(unpacked, resource)
 
   def test_custom_ref_type(self):
     """Tests custom ref types works."""
     resource = SimpleResource(x=1, y=2.0)
-    packed = JsonPackedRef.pack(resource)
-    unpacked = packed.ref.unpack(packed)
-    packed.ref.verify(packed)
+    ref, packed = JsonPackedRef.pack(resource)
+    self.assertEqual(ref, packed.ref())
+    unpacked = packed.ref().unpack(packed)
+    packed.ref().verify(packed.data)
     self.assertEqual(unpacked, resource)
 
   def test_id_from_id(self):
@@ -104,12 +107,14 @@ class RefTest(unittest.TestCase):
   def test_ref_to_wrapped_type(self):
     """Tests references to wrapped python types."""
     value = 1
-    packed = enact.Ref.pack(value)
+    ref, packed = enact.Ref.pack(value)
     self.assertIsInstance(
       resource_registry.from_resource_dict(packed.data),
       resource_registry.IntWrapper)
-    packed.ref.verify(packed)
-    self.assertEqual(packed.ref.unpack(packed), 1)
+    self.assertIsInstance(ref, enact.Ref)
+    self.assertEqual(ref, packed.ref())
+    packed.ref().verify(packed.data)
+    self.assertEqual(packed.ref().unpack(packed), 1)
 
 
 class StoreTest(unittest.TestCase):
@@ -148,10 +153,10 @@ class StoreTest(unittest.TestCase):
     resource = SimpleResource(x=1, y=2.0)
     ref = store.commit(resource)
 
-    # get() works because cached reference is correct.
+    # checkout() works because cached reference is correct.
     ref.checkout().x = 10
 
-    # get() fails because cached reference is incorrect.
+    # checkout() fails because cached reference is incorrect.
     with self.assertRaises(contexts.NoActiveContext):
       ref.checkout()
 
@@ -188,8 +193,8 @@ class StoreTest(unittest.TestCase):
     store = enact.Store()
     value = None
     ref = store.commit(value)
-    packed = ref.pack(value)
-    ref.verify(packed)
+    _, packed = ref.pack(value)
+    ref.verify(packed.data)
 
   def test_packed_links(self):
     """Tests links are properly tracked during packing."""
@@ -198,7 +203,8 @@ class StoreTest(unittest.TestCase):
       x = enact.commit(1)
       y = enact.commit(2.0)
       r1 = SimpleResource(x, [{'test': (y, y)}])  # type: ignore
-      got = enact.Ref.pack(r1).links
+      _, packed = enact.Ref.pack(r1)
+      got = packed.links
       want = {x.id, y.id}
       self.assertEqual(got, want)
 

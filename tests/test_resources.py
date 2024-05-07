@@ -119,25 +119,25 @@ class RefTest(unittest.TestCase):
     """Test that digest is identical for identical resources."""
     a = SimpleResource(1, 2, 3)
     b = SimpleResource(1, 2, 3)
-    r1 = enact.Ref.pack(a)
-    r2 = enact.Ref.pack(b)
+    _, r1 = enact.Ref.pack(a)
+    _, r2 = enact.Ref.pack(b)
     self.assertEqual(r1, r2)
 
   def test_typename_changes_hash(self):
     """Tests that changing the typename changes the hash."""
     a = SimpleResource(1, 2, 3)
     b = OtherSimpleResource(1, 2, 3)
-    r1 = enact.Ref.pack(a)
-    r2 = enact.Ref.pack(b)
-    self.assertNotEqual(r1.ref, r2.ref)
+    _, r1 = enact.Ref.pack(a)
+    _, r2 = enact.Ref.pack(b)
+    self.assertNotEqual(r1.ref(), r2.ref())
 
   def test_value_changes_hash(self):
     """Tests that changing values changes the hash."""
     a = SimpleResource(1, 2, 3)
     b = SimpleResource(1, 2, 4)
-    r1 = enact.Ref.pack(a)
-    r2 = enact.Ref.pack(b)
-    self.assertNotEqual(r1.ref, r2.ref)
+    _, r1 = enact.Ref.pack(a)
+    _, r2 = enact.Ref.pack(b)
+    self.assertNotEqual(r1.ref(), r2.ref())
 
   def test_hash_complex_nested(self):
     """Tests that nested resources are hashed correctly."""
