@@ -22,8 +22,8 @@ import os
 import pickle
 
 from typing import (
-  Any, Dict, Generic, Iterable, Iterator, Mapping, NamedTuple, Optional,
-  Set, Type, TypeVar, cast)
+  Any, Dict, Generic, Iterable, Iterator, List, Mapping, NamedTuple, Optional,
+  Set, Tuple, Type, TypeVar, cast)
 
 from enact import contexts
 from enact import digests
@@ -33,8 +33,13 @@ from enact import serialization
 from enact import utils
 
 
+
 class RefError(Exception):
   """Superclass for reference related errors."""
+
+
+R = TypeVar('R')
+RefT = TypeVar('RefT', bound='Ref')
 
 
 class PackedResource(NamedTuple):
@@ -42,20 +47,25 @@ class PackedResource(NamedTuple):
   # A resource packed for storage. This may be just the resource itself or some
   # other representation that encodes it, e.g., compressed or encrypted.
   data: interfaces.ResourceDict
-  # A reference to the packed resource. The reference class must be compatible
-  # with the packed resource, i.e., ref.verify(resource) must succeed.
-  ref: 'Ref'
-  # The outgoing references as a set.
+  # The reference to this object as a resource dict.
+  ref_dict: interfaces.ResourceDict
+  # The outgoing reference ids as a set of strings.
   links: Set[str]
 
+  def unpack(self) -> Any:
+    """Unpacks the resource."""
+    return self.ref().unpack(self)
 
-P = TypeVar('P', bound='Ref')
-R = TypeVar('R')
+  def ref(self) -> 'Ref':
+    """Returns the reference to this resource."""
+    r = resource_registry.from_resource_dict(self.ref_dict)
+    if not isinstance(r, Ref):
+      raise RefError(f'Expected a Ref, got {r}.')
+    return r
 
 
-def checkout(ref: Optional['Ref[R]']) -> R:
+def checkout(ref: 'Ref[R]') -> R:
   """Gets the reference or asserts false if None."""
-  assert ref
   return ref.checkout()
 
 
@@ -84,7 +94,12 @@ class Ref(Generic[R], interfaces.ResourceBase):
     self._cached: Optional[R] = value
 
   def _clear_cache(self):
+    """Clear the cache."""
     self._cached = None
+
+  def _set_cache(self, value: R):
+    """Set the cache."""
+    self._cached = resource_registry.unwrap(value)
 
   @property
   def digest(self) -> str:
@@ -101,10 +116,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
     return hash(self.id)
 
   @classmethod
-  def from_id(cls: Type[P], ref_id: str) -> P:
+  def from_id(cls: Type[RefT], ref_id: str) -> RefT:
     """Returns a reference from a reference ID."""
     try:
-      return cast(P, resource_registry.from_resource_dict(
+      return cast(RefT, resource_registry.from_resource_dict(
         interfaces.ResourceDict(cls, **json.loads(ref_id))))
     except json.JSONDecodeError as error:
       raise RefError(f'Invalid ref id: {ref_id}') from error
@@ -121,8 +136,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
     """Fetches the resource from the cache or active store."""
     if (self._cached is None or
         self.from_resource(resource_registry.wrap(self._cached)) != self):
-      self._cached = Store.current().checkout(self)
-    return self._cached
+      self._set_cache(Store.current().checkout(self))
+    return cast(R, self._cached)
 
   def __call__(self) -> R:
     """Alias for get."""
@@ -130,15 +145,21 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   def set(self, resource: R):
     """Sets the reference to point to the given resource."""
-    self._cached = resource
     self._digest = digests.digest(resource_registry.wrap(resource))
+    self._set_cache(resource)
 
   @classmethod
-  def from_resource(cls: Type[P], resource: interfaces.ResourceBase) -> P:
-    """Constructs a reference from a resource."""
+  def from_resource(cls: Type[RefT], resource: interfaces.ResourceBase) -> RefT:
+    """Constructs a reference to the resource."""
     return cls(
       digest=digests.digest(resource),
       value=resource_registry.unwrap(resource))
+
+  @classmethod
+  def from_resource_dict(
+      cls: Type[RefT], resource_dict: interfaces.ResourceDict) -> RefT:
+    """Constructs a reference to the resource represented by resource_dict."""
+    return cls(digest=digests.digest(resource_dict))
 
   def __eq__(self, other: Any):
     """Returns true if the other object is the same reference."""
@@ -146,36 +167,29 @@ class Ref(Generic[R], interfaces.ResourceBase):
       return False
     return self.digest == other.digest
 
-  @classmethod
-  def verify(cls, packed_resource: PackedResource):
-    """Check the integrity of a packed resource.
+  def verify(self, resource_dict: interfaces.ResourceDict):
+    """Check that this reference matches the resource dict.
 
     Args:
-      packed_resource: The packed resource to verify.
+      resource_dict: The resource dict to verify.
 
     Raises:
       RefError: If integrity check fails.
     """
-    if digests.digest(packed_resource.data) != packed_resource.ref.digest:
+    if self != self.from_resource_dict(resource_dict):
       raise RefError(
-        f'Reference {packed_resource.ref} does not match packed data '
-        f'{packed_resource.data}.')
+        f'Reference {self} does not match resource dict {resource_dict}.')
 
-  @classmethod
-  def unpack(cls: Type['Ref[R]'],
-             packed_resource: PackedResource) -> R:
+  def unpack(self: 'Ref[R]', packed_resource: PackedResource) -> R:
     """Unpacks the referenced resource."""
-    if not isinstance(packed_resource.ref, cls):
-      raise RefError(
-        f'Reference type mismatch: {packed_resource.ref} is not a {cls}.')
-    cls.verify(packed_resource)
+    self.verify(packed_resource.data)
     return cast(
       R,
       resource_registry.unwrap(
         resource_registry.from_resource_dict(packed_resource.data)))
 
   @classmethod
-  def pack(cls, resource: R) -> PackedResource:
+  def pack(cls: Type[RefT], resource: R) -> Tuple[RefT, PackedResource]:
     """Wraps and packs the resource."""
     as_resource = resource_registry.wrap(resource)
     # TODO: This should be improved since it walks the resource twice:
@@ -186,9 +200,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
     # using walk_resource.
     links = {
       l.id for l in utils.walk_resource(as_resource) if isinstance(l, Ref)}
-    return PackedResource(
+    ref = cls.from_resource(as_resource)
+    return ref, PackedResource(
       as_resource.to_resource_dict(),
-      ref=cls.from_resource(as_resource),
+      ref_dict=ref.to_resource_dict(),
       links=links)
 
   @classmethod
@@ -201,8 +216,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
     yield self._digest
 
   @classmethod
-  def from_fields(cls: Type[P],
-                  field_dict: Mapping[str, interfaces.FieldValue]) -> P:
+  def from_fields(cls: Type[RefT],
+                  field_dict: Mapping[str, interfaces.FieldValue]) -> RefT:
     """Constructs the resource from a value dictionary."""
     return cls(**field_dict)  # type: ignore
 
@@ -221,17 +236,30 @@ class StorageBackend(abc.ABC):
   """A storage backend."""
 
   @abc.abstractmethod
-  def commit(self, packed_resource: PackedResource):
+  def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
 
   @abc.abstractmethod
-  def has(self, ref: Ref) -> bool:
+  def has(self, ref_ids: Iterable[str]) -> List[bool]:
     """Returns whether the storage backend has the resource."""
 
   @abc.abstractmethod
   def checkout(
-      self, refs: Iterable[Ref]) -> Dict[Ref, Optional[PackedResource]]:
-    """Returns a dictionary of resources or None if not available."""
+      self, ref_ids: Iterable[str]) -> (
+        List[Optional[PackedResource]]):
+    """Returns a dictionary of resources or None if not available.
+
+    Args:
+      ref_ids: The reference IDs to retrieve.
+
+    Returns:
+      A list of packed resources or None if the resource is not available.
+      Returned in the order of the ref_ids argument.
+
+    Returns:
+      A dictionary that maps references to packed resources or None if the
+      resource is not available.
+    """
 
 
 class NotFound(Exception):
@@ -245,19 +273,18 @@ class InMemoryBackend(StorageBackend):
     """Create a new in-memory backend."""
     self._resources: Dict[str, PackedResource] = {}
 
-  def commit(self, packed_resource: PackedResource):
+  def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
-    packed_resource.ref.verify(packed_resource)
-    self._resources[packed_resource.ref.id] = packed_resource
+    self._resources[ref_id] = packed_resource
 
-  def has(self, ref: Ref) -> bool:
+  def has(self, ref_ids: Iterable[str]) -> List[bool]:
     """Returns whether the backend has the referenced resource."""
-    return ref.id in self._resources
+    return [ref_id in  self._resources for ref_id in ref_ids]
 
-  def checkout(self, refs: Iterable[Ref]) -> (
-      Dict[Ref, Optional[PackedResource]]):
+  def checkout(self, ref_ids: Iterable[str]) -> (
+      List[Optional[PackedResource]]):
     """Returns a dictionary with resource data or None if not available."""
-    return {ref: self._resources.get(ref.id) for ref in refs}
+    return [self._resources.get(ref_id) for ref_id in ref_ids]
 
   def __len__(self) -> int:
     """Returns the number of resources in the backend."""
@@ -286,38 +313,39 @@ class FileBackend(StorageBackend):
     self._serializer = serializer or serialization.JsonSerializer()
     self._use_base64_names = use_base64_names
 
-  def _get_path(self, ref: Ref) -> str:
-    basename = ref.id
+  def _get_path(self, ref_id: str) -> str:
+    basename = ref_id
     if self._use_base64_names:
       basename = base64.b64encode(basename.encode('utf-8')).decode('utf-8')
     return os.path.join(self._root_dir, basename)
 
-  def commit(self, packed_resource: PackedResource):
+  def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
-    packed_resource.ref.verify(packed_resource)
     data_bytes = self._serializer.serialize(packed_resource.data)
+    ref_bytes = self._serializer.serialize(packed_resource.ref_dict)
     links = packed_resource.links
-    with open(self._get_path(packed_resource.ref), 'wb') as file:
-      pickle.dump((data_bytes, links), file)
+    with open(self._get_path(ref_id), 'wb') as file:
+      pickle.dump((data_bytes, ref_bytes, links), file)
 
-  def has(self, ref: Ref) -> bool:
+  def has(self, ref_ids: Iterable[str]) -> List[bool]:
     """Returns whether the backend has the referenced resource."""
-    return os.path.exists(self._get_path(ref))
+    return [os.path.exists(self._get_path(ref_id)) for ref_id in ref_ids]
 
-  def checkout(self, refs: Iterable[Ref]) -> (
-      Dict[Ref, Optional[PackedResource]]):
+  def checkout(self, ref_ids: Iterable[str]) -> (
+      List[Optional[PackedResource]]):
     """Returns a dictionary with resource data or None if not available."""
-    return {ref: self._get_packed(ref) for ref in refs}
+    return [self._get_packed(ref_id) for ref_id in ref_ids]
 
-  def _get_packed(self, ref: Ref) -> Optional[PackedResource]:
+  def _get_packed(self, ref_id: str) -> Optional[PackedResource]:
     """Return the packed resource for a reference."""
-    path = self._get_path(ref)
+    path = self._get_path(ref_id)
     if not os.path.exists(path):
       return None
-    with open(self._get_path(ref), 'rb') as file:
-      data_bytes, links = pickle.load(file)
+    with open(path, 'rb') as file:
+      data_bytes, ref_bytes, links = pickle.load(file)
     data: interfaces.ResourceDict = self._serializer.deserialize(data_bytes)
-    return PackedResource(data, ref, links)
+    ref_dict: interfaces.ResourceDict = self._serializer.deserialize(ref_bytes)
+    return PackedResource(data, ref_dict, links)
 
 
 @contexts.register
@@ -337,22 +365,22 @@ class Store(contexts.Context):
 
   def commit(self, resource: R) -> Ref[R]:
     """Commits a resource to the store."""
-    packed_resource = self._ref_type.pack(resource)
-    self._backend.commit(packed_resource)
-    return packed_resource.ref
+    ref, packed_resource = self._ref_type.pack(resource)
+    self._backend.commit(ref.id, packed_resource)
+    return ref
 
   def has(self, ref: Ref) -> bool:
     """Returns whether the store has a resource."""
-    return self._backend.has(ref)
+    return self._backend.has((ref.id,))[0]
 
   def checkout(self, ref: Ref[R]) -> R:
     """Retrieves a resource from the store."""
-    packed_resource = self._backend.checkout([ref])[ref]
+    packed_resource = self._backend.checkout((ref.id,))[0]
     if packed_resource is None:
       raise NotFound(ref.id)
-    if packed_resource.ref != ref:
+    if packed_resource.ref() != ref:
       raise RefError(
-        f'Backend returned wrong reference:\ngot {packed_resource.ref}\n'
+        f'Backend returned wrong reference:\ngot {packed_resource.ref()}\n'
         f'expected: {ref}')
     return ref.unpack(packed_resource)
 
