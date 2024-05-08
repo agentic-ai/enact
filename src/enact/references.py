@@ -255,11 +255,83 @@ class StorageBackend(abc.ABC):
     Returns:
       A list of packed resources or None if the resource is not available.
       Returned in the order of the ref_ids argument.
+    """
+
+  def get_types(
+      self, ref_ids: Iterable[str]) -> List[
+        Optional[Set[interfaces.TypeInfo]]]:
+    """Returns the types required to unpack the resources.
+
+    The default implementation will load all resource data and extract only
+    the type info. This should be overridden if more efficiency is required.
+
+    Args:
+      ref_ids: The reference IDs to retrieve.
 
     Returns:
-      A dictionary that maps references to packed resources or None if the
-      resource is not available.
+      A list of sets of types or None, in the order of the ref_ids argument.
+      None is returned if a reference cannot be resolved.
     """
+    result: List[Optional[Set[interfaces.TypeInfo]]] = []
+    for packed in self.checkout(ref_ids):
+      if packed:
+        # Add resource types.
+        type_set = {
+          value.type_info for value in utils.walk_resource_dict(packed.data)}
+        # Add reference type.
+        type_set.add(packed.ref_dict.type_info)
+        result.append(type_set)
+      else:
+        result.append(None)
+    return result
+
+  def get_dependency_graph(
+      self,
+      ref_ids: Iterable[str],
+      max_depth: Optional[int]=None) -> Dict[str, Optional[Set[str]]]:
+    """Return the dependency graph for the input references.
+
+    The default implementation will load all resource data and extract only
+    the reference graph. This should be overridden if more efficiency is
+    required.
+
+    Args:
+      ref_dict: The reference to retrieve dependencies for, encoded as a
+        resource_dict.
+      max_depth: The maximum depth to retrieve dependencies. If None, all
+        dependencies will be retrieved.
+
+    Returns:
+      A dictionary from reference IDs to sets of references that the key
+      depends on directly. An unknown reference will map to None. The set of
+      keys in the returned dictionary will contain the IDs of the references
+      in ref_dicts and all references that they depend on up to the specified
+      depth.
+    """
+    result: Dict[str, Optional[Set[str]]] = {}
+
+    # Set up BFS 'queue', which is going to be batch processed.
+    seen: Set[str] = set(ref_ids)
+    this_level = set(seen)
+    depth = 0
+
+    while this_level and (max_depth is None or depth <= max_depth):
+      # Batch fetch all unfetched references at this depth.
+      packed_resources = self.checkout(this_level)
+      next_level: Set[str] = set()
+
+      for ref_id, packed in zip(this_level, packed_resources):
+        if packed is None:
+          result[ref_id] = None
+        else:
+          result[ref_id] = packed.links
+          next_level.update(packed.links - seen)
+          seen.update(packed.links)
+
+      # Update loop variables
+      depth += 1
+      this_level = next_level
+    return result
 
 
 class NotFound(Exception):
