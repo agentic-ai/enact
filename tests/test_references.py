@@ -129,6 +129,19 @@ class StoreTest(unittest.TestCase):
     self.assertEqual(store.checkout(ref), resource)
     self.assertNotEqual(id(store.checkout(ref)), id(resource))
 
+  def test_store_provided_backend(self):
+    """Tests that constructing stores with a provided backend works."""
+    b1 = enact.InMemoryBackend()
+    self.assertEqual(
+      enact.Store(b1)._backend,  # pylint: disable=protected-access
+      b1)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+      b2 = enact.FileBackend(tmpdir)
+      self.assertEqual(
+        enact.Store(b2)._backend,  # pylint: disable=protected-access
+        b2)
+
   def test_custom_ref(self):
     """Test stores with custom ref types."""
     store = enact.Store(ref_type=JsonPackedRef)
