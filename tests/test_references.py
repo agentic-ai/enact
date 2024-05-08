@@ -241,3 +241,10 @@ class StoreTest(unittest.TestCase):
       with enact.Store(backend=enact.FileBackend(tmpdir)):
         with self.assertRaises(acyclic.CycleDetected):
           enact.commit(r1)
+
+  def test_ref_distribution_info(self):
+    """Makes sure that refs have a distribution info."""
+    self.assertEqual(
+      enact.Ref.type_info().distribution_info,
+      interfaces.TypeInfo(version.DIST_NAME, version.__version__))
+
