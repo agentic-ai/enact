@@ -116,9 +116,14 @@ class DistributionRegistry:
   def get_distribution_info(self, python_obj: Any) -> (
       Optional[interfaces.DistributionInfo]):
     """Get the distribution info for a given python type if it exists."""
-    return self.get_path_distribution_info(inspect.getfile(python_obj))
-
-
+    try:
+      file = inspect.getfile(python_obj)
+    except TypeError:
+      # This happens for built-in types (or types that are wrongly
+      # resolved as built-in types, such as types defined in ipynb notebook
+      # cells).
+      return None
+    return self.get_path_distribution_info(file)
 
 def register_distribution(
     dist_name: str,
