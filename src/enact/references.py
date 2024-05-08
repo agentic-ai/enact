@@ -359,7 +359,7 @@ class Store(contexts.Context):
       ref_type: Type[Ref]=Ref):
     """Initializes the store."""
     super().__init__()
-    self._backend = backend or InMemoryBackend()
+    self._backend = backend if backend is not None else InMemoryBackend()
     self._registry = registry
     self._ref_type = ref_type
 
