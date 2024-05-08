@@ -312,3 +312,51 @@ class StoreTest(unittest.TestCase):
         refs.append(enact.commit(refs[-1]))
       graph = backend.get_dependency_graph((refs[-1].id,), max_depth=10)
       self.assertEqual(set(graph.keys()), {ref.id for ref in refs[-11:]})
+
+  def test_get_transitive_type_requirements(self):
+    """Tests that getting transitive type requirements works."""
+    with enact.Store() as store:
+      r1 = enact.commit(5)
+      r2 = enact.commit([r1])
+      r3 = enact.commit(SimpleResource(1, 2.0))
+      r4 = enact.commit({r2, r3})
+
+      expected_type_requirements = {
+        enact.Ref.type_info(),
+        resource_registry.IntWrapper.type_info(),
+        resource_registry.ListWrapper.type_info(),
+        SimpleResource.type_info(),
+        type_wrappers.SetWrapper.type_info(),
+      }
+
+      type_requirements = store.get_transitive_type_requirements(r4)
+      self.assertEqual(type_requirements, expected_type_requirements)
+
+  def test_get_transitive_type_requirements_fails(self):
+    """Tests that the transitive type fails if a reference is not present."""
+    with enact.Store() as store:
+      fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
+      r = enact.commit(fake_ref)
+      with self.assertRaises(references.NotFound):
+        store.get_transitive_type_requirements(r)
+
+  def test_get_distribution_requirements(self):
+    """Tests that getting distribution requirements works."""
+    with enact.Store() as store:
+      r1 = enact.commit(5)
+      r2 = enact.commit([r1])
+      r3 = enact.commit(SimpleResource(1, 2.0))
+      r4 = enact.commit({r2, r3})
+
+      # We don't have a distribution info for SimpleResource.
+      with self.assertRaises(references.DistributionInfoError):
+        store.get_distribution_requirements(r4)
+
+      expected_dist_requirements = {
+        interfaces.DistributionInfo(version.DIST_NAME, version.__version__),
+      }
+
+      dist_requirements = store.get_distribution_requirements(
+        r4, expect_distribution_info=False)
+
+      self.assertEqual(dist_requirements, expected_dist_requirements)

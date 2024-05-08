@@ -420,6 +420,15 @@ class FileBackend(StorageBackend):
     return PackedResource(data, ref_dict, links)
 
 
+class DistributionInfoError(Exception):
+  """Raised when there are issues with distribution info objects.."""
+
+
+class TypeInfoError(Exception):
+  """Raised when there is an issue with type info objects."""
+
+
+
 @contexts.register
 class Store(contexts.Context):
   """A store for resources."""
@@ -455,6 +464,45 @@ class Store(contexts.Context):
         f'Backend returned wrong reference:\ngot {packed_resource.ref()}\n'
         f'expected: {ref}')
     return ref.unpack(packed_resource)
+
+  def get_transitive_type_requirements(self, ref: Ref) -> (
+      Set[interfaces.TypeInfo]):
+    """Return a set of transitive type requirements for the reference."""
+    graph = self._backend.get_dependency_graph([ref.id])
+    all_references = {ref.id}
+    for ref_id, deps in graph.items():
+      if deps is None:
+        raise NotFound(f'Could not resolve transitive reference {ref_id}.')
+      all_references.update(deps)
+    type_sets = self._backend.get_types(all_references)
+    result: Set[interfaces.TypeInfo] = set()
+    for typed_ref, type_set in zip(all_references, type_sets):
+      if type_set is None:
+        raise TypeInfoError(
+          f'Could not resolve types for transitive reference {typed_ref}.')
+      result.update(type_set)
+    return result
+
+  def get_distribution_requirements(
+        self, ref: Ref, expect_distribution_info: bool=True) -> (
+      Set[interfaces.DistributionInfo]):
+    """Return the distribution requirements of a reference.
+
+    Args:
+      ref: The reference to check.
+      expect_distribution_info: If True, raise an error if the reference does
+        not have a distribution info.
+    """
+    type_requirements = self.get_transitive_type_requirements(ref)
+    result: Set[interfaces.DistributionInfo] = set()
+    for type_info in type_requirements:
+      if type_info.distribution_info is None:
+        if expect_distribution_info:
+          raise DistributionInfoError(
+            f'Type {type_info} does not have distribution info.')
+      else:
+        result.add(type_info.distribution_info)
+    return result
 
 
 @contexts.register_to_superclass(Store)
