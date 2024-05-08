@@ -25,6 +25,8 @@ from enact import serialization
 from enact import contexts
 from enact import resource_registry
 from enact import acyclic
+from enact import type_wrappers
+from enact import version
 
 # pylint: disable=invalid-name,missing-class-docstring
 
@@ -248,3 +250,65 @@ class StoreTest(unittest.TestCase):
       enact.Ref.type_info().distribution_info,
       interfaces.TypeInfo(version.DIST_NAME, version.__version__))
 
+  def test_backend_get_types(self):
+    """Tests that getting types work."""
+    backend = enact.InMemoryBackend()
+    with enact.Store(backend):
+      r1 = enact.commit(
+        SimpleResource(
+          1,
+          SimpleResource(
+            2,
+            SimpleResource(0, {1, 2}))))  # set  # type: ignore
+      r2 = enact.commit([(1,2)])  # tuple in list
+      r3 = enact.Ref.from_id('{"digest": "fake_id"}')
+      # pylint: disable=unbalanced-tuple-unpacking
+      t1, t2, t3 = backend.get_types((r1.id, r2.id, r3.id))
+      self.assertIsNone(t3)
+
+      expected_t1 = {
+        enact.Ref.type_info(),
+        SimpleResource.type_info(),
+        type_wrappers.SetWrapper.type_info(),
+      }
+      self.assertEqual(t1, expected_t1)
+
+      expected_t2 = {
+        enact.Ref.type_info(),
+        resource_registry.ListWrapper.type_info(),
+        type_wrappers.TupleWrapper.type_info()
+      }
+      self.assertEqual(t2, expected_t2)
+
+  def test_backend_get_dependency_graph(self):
+    """Tests that getting dependency graphs works."""
+    backend = enact.InMemoryBackend()
+
+    with enact.Store(backend):
+      r1 = enact.commit(5)
+      r2 = enact.commit([r1])
+      r3 = enact.commit([r1])
+      r4 = enact.commit([r2, r3, r1])
+      fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
+
+      graph = backend.get_dependency_graph(
+        (r1.id, r2.id, r3.id, r4.id, fake_ref.id))
+      expected_graph = {
+        r4.id: {r2.id, r3.id, r1.id},
+        r3.id: {r1.id},
+        r2.id: {r1.id},
+        r1.id: set(),
+        fake_ref.id: None}
+
+      self.assertEqual(graph, expected_graph)
+
+  def test_backend_get_dependency_graph_depth(self):
+    """Tests that getting dependency graphs up to a certain depth works."""
+    backend = enact.InMemoryBackend()
+
+    with enact.Store(backend):
+      refs = [enact.commit(0)]
+      for _ in range(20):
+        refs.append(enact.commit(refs[-1]))
+      graph = backend.get_dependency_graph((refs[-1].id,), max_depth=10)
+      self.assertEqual(set(graph.keys()), {ref.id for ref in refs[-11:]})
