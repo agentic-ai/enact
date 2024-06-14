@@ -118,16 +118,14 @@ class DistributionInfo(NamedTuple):
 class ResourceBase:
   """Base class for resources.
 
-  Not an abstract base class in order to avoid meta-class conflict.
+  A resource is a python class that represents a directed-acyclic graph of
+  structured data values. A resource class is associated with a fixed list of
+  named fields. Resources follow value-semantics: two resource instances of the
+  same type are equal if their fields are equal. Value-equal resources should
+  generally behave interchangeably in the context of the same computation.
 
-  Resources have a unique type identifier. Each resource class is associated
-  with a fixed list of named fields. These fields must have value semantics,
-  that is, replacing a field by a copy should not change the meaning of the
-  resource. This means, for example, that code using resources should not rely
-  on aliasing assumptions (e.g., two resources sharing the same list instance).
-
-  In particular, this also means that resources may not mutually reference each
-  other.
+  Resources have type identifiers based on their class type, and optionally,
+  the package version they are defined in.
   """
   _enact_distribution_info: Optional[DistributionInfo] = None
 
