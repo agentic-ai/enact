@@ -71,32 +71,32 @@ class FieldTypeError(FrameworkError):
   """Superclass for errors related to field types."""
 
 
-class TypeInfo(NamedTuple):
+class TypeKey(NamedTuple):
   """Information about a resource type."""
   name: str
-  distribution_info: Optional['DistributionInfo']
+  distribution_key: Optional['DistributionKey']
 
   def type_id(self) -> str:
     """Returns a unique string identifier for the type."""
     return json.dumps(self.as_dict(), sort_keys=True)
 
   def as_dict(self) -> Dict[str, Json]:
-    """Returns a dictionary representation of the distribution info."""
+    """Returns a dictionary representation of the distribution key."""
     dist_info = (
-      self.distribution_info.as_dict() if self.distribution_info else None)
+      self.distribution_key.as_dict() if self.distribution_key else None)
     return {
       'name': self.name,
-      'distribution_info': dist_info}
+      'distribution_key': dist_info}
 
   @staticmethod
-  def from_dict(d: Dict[str, Json]) -> 'TypeInfo':
-    """Instantiate TypeInfo from a dictionary."""
+  def from_dict(d: Dict[str, Json]) -> 'TypeKey':
+    """Instantiate TypeKey from a dictionary."""
     r: Dict = dict(d)
-    r['distribution_info'] = DistributionInfo.from_dict(r['distribution_info'])
-    return TypeInfo(**r)
+    r['distribution_key'] = DistributionKey.from_dict(r['distribution_key'])
+    return TypeKey(**r)
 
 
-class DistributionInfo(NamedTuple):
+class DistributionKey(NamedTuple):
   """Information about a package where a resource is defined.
 
   This information (together with qualified class names) is used to identify
@@ -106,13 +106,13 @@ class DistributionInfo(NamedTuple):
   version: str
 
   def as_dict(self) -> Dict[str, Json]:
-    """Returns a dictionary representation of the distribution info."""
+    """Returns a dictionary representation of the distribution key."""
     return {'name': self.name, 'version': self.version}
 
   @staticmethod
-  def from_dict(d: Dict[str, Json]) -> 'DistributionInfo':
-    """Instantiate DistributionInfo from a dictionary."""
-    return DistributionInfo(**cast(Dict[str, str], d))
+  def from_dict(d: Dict[str, Json]) -> 'DistributionKey':
+    """Instantiate DistributionKey from a dictionary."""
+    return DistributionKey(**cast(Dict[str, str], d))
 
 
 class ResourceBase:
@@ -127,30 +127,30 @@ class ResourceBase:
   Resources have type identifiers based on their class type, and optionally,
   the package version they are defined in.
   """
-  _enact_distribution_info: Optional[DistributionInfo] = None
+  _enact_distribution_key: Optional[DistributionKey] = None
 
   @classmethod
-  def type_info(cls) -> TypeInfo:
+  def type_key(cls) -> TypeKey:
     """Returns a descriptor for the type."""
-    return TypeInfo(
+    return TypeKey(
       name=f'{cls.__module__}.{cls.__qualname__}',
-      distribution_info=cls.type_distribution_info())
+      distribution_key=cls.type_distribution_key())
 
   @classmethod
-  def type_distribution_info(cls) -> Optional[DistributionInfo]:
+  def type_distribution_key(cls) -> Optional[DistributionKey]:
     """Returns package information for the type if set."""
-    return cls._enact_distribution_info
+    return cls._enact_distribution_key
 
   @classmethod
-  def set_type_distribution_info(cls, info: DistributionInfo):
+  def set_type_distribution_key(cls, info: DistributionKey):
     """Sets the package information for the type."""
-    cls._enact_distribution_info = info
+    cls._enact_distribution_key = info
 
   @classmethod
   @functools.lru_cache
   def type_id(cls) -> str:
     """Returns a string descriptor of the type."""
-    return cls.type_info().type_id()
+    return cls.type_key().type_id()
 
   @classmethod
   @abc.abstractmethod
@@ -221,13 +221,13 @@ class ResourceBase:
 
 
 class ResourceDict(Generic[C], Dict[str, ResourceDictValue]):
-  """A dictionary representing a resource with attached TypeInfo."""
+  """A dictionary representing a resource with attached TypeKey."""
 
   def __init__(
-      self, resource_type: Union[Type[C], TypeInfo], *args, **kwargs):
+      self, resource_type: Union[Type[C], TypeKey], *args, **kwargs):
     super().__init__(*args, **kwargs)
-    if not isinstance(resource_type, TypeInfo):
-      resource_type = resource_type.type_info()
+    if not isinstance(resource_type, TypeKey):
+      resource_type = resource_type.type_key()
     self.type_info = resource_type
 
 

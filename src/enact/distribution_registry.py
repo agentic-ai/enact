@@ -47,11 +47,11 @@ class DistributionRegistry:
 
   def __init__(self):
     """Initialize a new package registry."""
-    self._file_map: Dict[str, interfaces.DistributionInfo] = {}
-    self._dir_map: Dict[str, interfaces.DistributionInfo] = {}
-    self._registered: Dict[str, interfaces.DistributionInfo] = {}
+    self._file_map: Dict[str, interfaces.DistributionKey] = {}
+    self._dir_map: Dict[str, interfaces.DistributionKey] = {}
+    self._registered: Dict[str, interfaces.DistributionKey] = {}
 
-  def registered(self) -> Iterable[interfaces.DistributionInfo]:
+  def registered(self) -> Iterable[interfaces.DistributionKey]:
     """Yield the registered packages."""
     return self._registered.values()
 
@@ -86,7 +86,7 @@ class DistributionRegistry:
         dist_version = dist.metadata['version']
       if path is None and dist.files:
         files = [os.path.abspath(str(f.locate())) for f in dist.files]
-    info = interfaces.DistributionInfo(
+    info = interfaces.DistributionKey(
       name=dist_name, version=dist_version)
     if path:
       self._dir_map[path] = info
@@ -101,9 +101,9 @@ class DistributionRegistry:
       self._file_map[file_path] = info
     self._registered[dist_name] = info
 
-  def get_path_distribution_info(self, path: str) -> (
-      Optional[interfaces.DistributionInfo]):
-    """Get the distribution info for a given path if it exists."""
+  def get_path_distribution_key(self, path: str) -> (
+      Optional[interfaces.DistributionKey]):
+    """Get the distribution key for a given path if it exists."""
     path = os.path.abspath(path)
     dist_info = self._file_map.get(path)
     if dist_info:
@@ -113,9 +113,9 @@ class DistributionRegistry:
         return info
     return None
 
-  def get_distribution_info(self, python_obj: Any) -> (
-      Optional[interfaces.DistributionInfo]):
-    """Get the distribution info for a given python type if it exists."""
+  def get_distribution_key(self, python_obj: Any) -> (
+      Optional[interfaces.DistributionKey]):
+    """Get the distribution key for a given python type if it exists."""
     try:
       file = inspect.getfile(python_obj)
     except TypeError:
@@ -123,7 +123,7 @@ class DistributionRegistry:
       # resolved as built-in types, such as types defined in ipynb notebook
       # cells).
       return None
-    return self.get_path_distribution_info(file)
+    return self.get_path_distribution_key(file)
 
 def register_distribution(
     dist_name: str,
@@ -146,15 +146,15 @@ def register_distribution(
   """
   return registry().register_distribution(dist_name, dist_version, path)
 
-def get_path_distribution_info(path: str) -> (
-    Optional[interfaces.DistributionInfo]):
-  """Get the distribution info for a given path if it exists."""
-  return registry().get_path_distribution_info(path)
+def get_path_distribution_key(path: str) -> (
+    Optional[interfaces.DistributionKey]):
+  """Get the distribution key for a given path if it exists."""
+  return registry().get_path_distribution_key(path)
 
-def get_distribution_info(python_obj: Any) -> (
-    Optional[interfaces.DistributionInfo]):
-  """Get the distribution info for a given python type if it exists."""
-  return registry().get_distribution_info(python_obj)
+def get_distribution_key(python_obj: Any) -> (
+    Optional[interfaces.DistributionKey]):
+  """Get the distribution key for a given python type if it exists."""
+  return registry().get_distribution_key(python_obj)
 
 def ensure_enact_registered():
   """Ensure the enact distribution is registered."""

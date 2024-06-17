@@ -49,8 +49,8 @@ class DistributionRegistryTest(unittest.TestCase):
     d = distribution_registry.DistributionRegistry()
     d.register_distribution('foo', '1.0', '/path/to/foo')
     self.assertEqual(
-      d.get_path_distribution_info('/path/to/foo/my.py'),
-      enact.DistributionInfo('foo', '1.0'))
+      d.get_path_distribution_key('/path/to/foo/my.py'),
+      enact.DistributionKey('foo', '1.0'))
 
   def test_register_editable_install(self):
     """Tests that editable installs can be registered."""
@@ -62,8 +62,8 @@ class DistributionRegistryTest(unittest.TestCase):
     d = distribution_registry.DistributionRegistry()
     d.register_distribution(version.DIST_NAME)
     self.assertEqual(
-      d.get_distribution_info(enact.ResourceBase),
-      enact.DistributionInfo(version.DIST_NAME, version.__version__))
+      d.get_distribution_key(enact.ResourceBase),
+      enact.DistributionKey(version.DIST_NAME, version.__version__))
 
   def test_register_non_editable_install(self):
     """Tests that editable installs can be registered."""
@@ -75,5 +75,5 @@ class DistributionRegistryTest(unittest.TestCase):
     d = distribution_registry.DistributionRegistry()
     d.register_distribution('wrapt')
     self.assertEqual(
-      d.get_distribution_info(wrapt.decorator),
-      enact.DistributionInfo('wrapt', wrapt.__version__))
+      d.get_distribution_key(wrapt.decorator),
+      enact.DistributionKey('wrapt', wrapt.__version__))

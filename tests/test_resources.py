@@ -108,7 +108,7 @@ class ResourceTest(unittest.TestCase):
     as_dict = r.to_resource_dict()
     w_dict = as_dict['w']
     assert isinstance(w_dict, enact.ResourceDict)
-    self.assertEqual(w_dict.type_info, CustomWrapper.type_info())
+    self.assertEqual(w_dict.type_info, CustomWrapper.type_key())
     rebuilt = resource_registry.from_resource_dict(as_dict)
     self.assertEqual(r.w.x, rebuilt.w.x)
     self.assertEqual(r.i, rebuilt.i)
