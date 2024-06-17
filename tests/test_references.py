@@ -56,7 +56,7 @@ class JsonPackedRef(enact.Ref):
       interfaces.ResourceBase):
     """Unpacks the referenced resource."""
     data = packed_resource.data
-    if data.type_info != JsonPackedResource.type_info():
+    if data.type_info != JsonPackedResource.type_key():
       raise enact.RefError('Resource is not a JsonPackedResource.')
     json_packed: JsonPackedResource = resource_registry.from_resource_dict(data)
     unpacked_dict = serialization.JsonSerializer().deserialize(
@@ -244,11 +244,11 @@ class StoreTest(unittest.TestCase):
         with self.assertRaises(acyclic.CycleDetected):
           enact.commit(r1)
 
-  def test_ref_distribution_info(self):
-    """Makes sure that refs have a distribution info."""
+  def test_ref_distribution_key(self):
+    """Makes sure that refs have a distribution key."""
     self.assertEqual(
-      enact.Ref.type_info().distribution_info,
-      interfaces.TypeInfo(version.DIST_NAME, version.__version__))
+      enact.Ref.type_key().distribution_key,
+      interfaces.TypeKey(version.DIST_NAME, version.__version__))
 
   def test_backend_get_types(self):
     """Tests that getting types work."""
@@ -267,16 +267,16 @@ class StoreTest(unittest.TestCase):
       self.assertIsNone(t3)
 
       expected_t1 = {
-        enact.Ref.type_info(),
-        SimpleResource.type_info(),
-        type_wrappers.SetWrapper.type_info(),
+        enact.Ref.type_key(),
+        SimpleResource.type_key(),
+        type_wrappers.SetWrapper.type_key(),
       }
       self.assertEqual(t1, expected_t1)
 
       expected_t2 = {
-        enact.Ref.type_info(),
-        resource_registry.ListWrapper.type_info(),
-        type_wrappers.TupleWrapper.type_info()
+        enact.Ref.type_key(),
+        resource_registry.ListWrapper.type_key(),
+        type_wrappers.TupleWrapper.type_key()
       }
       self.assertEqual(t2, expected_t2)
 
@@ -322,11 +322,11 @@ class StoreTest(unittest.TestCase):
       r4 = enact.commit({r2, r3})
 
       expected_type_requirements = {
-        enact.Ref.type_info(),
-        resource_registry.IntWrapper.type_info(),
-        resource_registry.ListWrapper.type_info(),
-        SimpleResource.type_info(),
-        type_wrappers.SetWrapper.type_info(),
+        enact.Ref.type_key(),
+        resource_registry.IntWrapper.type_key(),
+        resource_registry.ListWrapper.type_key(),
+        SimpleResource.type_key(),
+        type_wrappers.SetWrapper.type_key(),
       }
 
       type_requirements = store.get_transitive_type_requirements(r4)
@@ -348,15 +348,15 @@ class StoreTest(unittest.TestCase):
       r3 = enact.commit(SimpleResource(1, 2.0))
       r4 = enact.commit({r2, r3})
 
-      # We don't have a distribution info for SimpleResource.
-      with self.assertRaises(references.DistributionInfoError):
+      # We don't have a distribution key for SimpleResource.
+      with self.assertRaises(references.DistributionKeyError):
         store.get_distribution_requirements(r4)
 
       expected_dist_requirements = {
-        interfaces.DistributionInfo(version.DIST_NAME, version.__version__),
+        interfaces.DistributionKey(version.DIST_NAME, version.__version__),
       }
 
       dist_requirements = store.get_distribution_requirements(
-        r4, expect_distribution_info=False)
+        r4, expect_distribution_key=False)
 
       self.assertEqual(dist_requirements, expected_dist_requirements)

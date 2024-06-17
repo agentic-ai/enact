@@ -182,12 +182,12 @@ class Registry:
     if not issubclass(resource, interfaces.ResourceBase):
       raise RegistryError(
         f'Cannot register non-resource type: {resource}')
-    # Auto-add distribution info.
-    dist_info = resource.type_distribution_info()
-    if dist_info is None:
-      dist_info = distribution_registry.get_distribution_info(resource)
-      if dist_info is not None:
-        resource.set_type_distribution_info(dist_info)
+    # Auto-add distribution key.
+    dist_key = resource.type_distribution_key()
+    if dist_key is None:
+      dist_key = distribution_registry.get_distribution_key(resource)
+      if dist_key is not None:
+        resource.set_type_distribution_key(dist_key)
     # Record the type.
     type_id = resource.type_id()
     if (type_id in self._type_map and
@@ -206,10 +206,10 @@ class Registry:
     if issubclass(resource, FunctionWrapper):
       return self._register_function_wrapper(resource)
 
-  def lookup(self, type_id: Union[str, interfaces.TypeInfo]) -> (
+  def lookup(self, type_id: Union[str, interfaces.TypeKey]) -> (
       Type[interfaces.ResourceBase]):
     """Looks up a resource type by name or type_info."""
-    if isinstance(type_id, interfaces.TypeInfo):
+    if isinstance(type_id, interfaces.TypeKey):
       type_id = type_id.type_id()
     resource_class = self._type_map.get(type_id)
     if not resource_class:
