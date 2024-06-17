@@ -30,6 +30,7 @@ from enact import digests
 from enact import interfaces
 from enact import resource_registry
 from enact import serialization
+from enact import types
 from enact import utils
 
 
@@ -259,7 +260,7 @@ class StorageBackend(abc.ABC):
 
   def get_types(
       self, ref_ids: Iterable[str]) -> List[
-        Optional[Set[interfaces.TypeKey]]]:
+        Optional[Set[types.TypeKey]]]:
     """Returns the types required to unpack the resources.
 
     The default implementation will load all resource data and extract only
@@ -272,7 +273,7 @@ class StorageBackend(abc.ABC):
       A list of sets of types or None, in the order of the ref_ids argument.
       None is returned if a reference cannot be resolved.
     """
-    result: List[Optional[Set[interfaces.TypeKey]]] = []
+    result: List[Optional[Set[types.TypeKey]]] = []
     for packed in self.checkout(ref_ids):
       if packed:
         # Add resource types.
@@ -466,7 +467,7 @@ class Store(contexts.Context):
     return ref.unpack(packed_resource)
 
   def get_transitive_type_requirements(self, ref: Ref) -> (
-      Set[interfaces.TypeKey]):
+      Set[types.TypeKey]):
     """Return a set of transitive type requirements for the reference."""
     graph = self._backend.get_dependency_graph([ref.id])
     all_references = {ref.id}
@@ -475,7 +476,7 @@ class Store(contexts.Context):
         raise NotFound(f'Could not resolve transitive reference {ref_id}.')
       all_references.update(deps)
     type_sets = self._backend.get_types(all_references)
-    result: Set[interfaces.TypeKey] = set()
+    result: Set[types.TypeKey] = set()
     for typed_ref, type_set in zip(all_references, type_sets):
       if type_set is None:
         raise TypeKeyError(
@@ -485,7 +486,7 @@ class Store(contexts.Context):
 
   def get_distribution_requirements(
         self, ref: Ref, expect_distribution_key: bool=True) -> (
-      Set[interfaces.DistributionKey]):
+      Set[types.DistributionKey]):
     """Return the distribution requirements of a reference.
 
     Args:
@@ -494,7 +495,7 @@ class Store(contexts.Context):
         not have a distribution key.
     """
     type_requirements = self.get_transitive_type_requirements(ref)
-    result: Set[interfaces.DistributionKey] = set()
+    result: Set[types.DistributionKey] = set()
     for type_info in type_requirements:
       if type_info.distribution_key is None:
         if expect_distribution_key:

@@ -26,6 +26,7 @@ from enact import contexts
 from enact import resource_registry
 from enact import acyclic
 from enact import type_wrappers
+from enact import types
 from enact import version
 
 # pylint: disable=invalid-name,missing-class-docstring
@@ -248,7 +249,7 @@ class StoreTest(unittest.TestCase):
     """Makes sure that refs have a distribution key."""
     self.assertEqual(
       enact.Ref.type_key().distribution_key,
-      interfaces.TypeKey(version.DIST_NAME, version.__version__))
+      types.TypeKey(version.DIST_NAME, version.__version__))
 
   def test_backend_get_types(self):
     """Tests that getting types work."""
@@ -353,7 +354,7 @@ class StoreTest(unittest.TestCase):
         store.get_distribution_requirements(r4)
 
       expected_dist_requirements = {
-        interfaces.DistributionKey(version.DIST_NAME, version.__version__),
+        types.DistributionKey(version.DIST_NAME, version.__version__),
       }
 
       dist_requirements = store.get_distribution_requirements(
