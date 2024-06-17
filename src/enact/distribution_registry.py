@@ -18,7 +18,7 @@ import inspect
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
-from enact import interfaces
+from enact import types
 from enact import version
 
 
@@ -47,11 +47,11 @@ class DistributionRegistry:
 
   def __init__(self):
     """Initialize a new package registry."""
-    self._file_map: Dict[str, interfaces.DistributionKey] = {}
-    self._dir_map: Dict[str, interfaces.DistributionKey] = {}
-    self._registered: Dict[str, interfaces.DistributionKey] = {}
+    self._file_map: Dict[str, types.DistributionKey] = {}
+    self._dir_map: Dict[str, types.DistributionKey] = {}
+    self._registered: Dict[str, types.DistributionKey] = {}
 
-  def registered(self) -> Iterable[interfaces.DistributionKey]:
+  def registered(self) -> Iterable[types.DistributionKey]:
     """Yield the registered packages."""
     return self._registered.values()
 
@@ -86,7 +86,7 @@ class DistributionRegistry:
         dist_version = dist.metadata['version']
       if path is None and dist.files:
         files = [os.path.abspath(str(f.locate())) for f in dist.files]
-    info = interfaces.DistributionKey(
+    info = types.DistributionKey(
       name=dist_name, version=dist_version)
     if path:
       self._dir_map[path] = info
@@ -102,7 +102,7 @@ class DistributionRegistry:
     self._registered[dist_name] = info
 
   def get_path_distribution_key(self, path: str) -> (
-      Optional[interfaces.DistributionKey]):
+      Optional[types.DistributionKey]):
     """Get the distribution key for a given path if it exists."""
     path = os.path.abspath(path)
     dist_info = self._file_map.get(path)
@@ -114,7 +114,7 @@ class DistributionRegistry:
     return None
 
   def get_distribution_key(self, python_obj: Any) -> (
-      Optional[interfaces.DistributionKey]):
+      Optional[types.DistributionKey]):
     """Get the distribution key for a given python type if it exists."""
     try:
       file = inspect.getfile(python_obj)
@@ -147,12 +147,12 @@ def register_distribution(
   return registry().register_distribution(dist_name, dist_version, path)
 
 def get_path_distribution_key(path: str) -> (
-    Optional[interfaces.DistributionKey]):
+    Optional[types.DistributionKey]):
   """Get the distribution key for a given path if it exists."""
   return registry().get_path_distribution_key(path)
 
 def get_distribution_key(python_obj: Any) -> (
-    Optional[interfaces.DistributionKey]):
+    Optional[types.DistributionKey]):
   """Get the distribution key for a given python type if it exists."""
   return registry().get_distribution_key(python_obj)
 

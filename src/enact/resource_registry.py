@@ -15,13 +15,14 @@
 """Type registration functionality to allow deserialization of resources."""
 
 import inspect
-import types
+import types as types_module
 from typing import (
   Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Set,
   Type, TypeVar, Union, cast)
 
 from enact import distribution_registry
 from enact import interfaces
+from enact import types
 
 
 
@@ -87,7 +88,8 @@ class MethodWrapper(interfaces.ResourceBase):
   """Base class for method wrappers."""
 
   @classmethod
-  def wrap(cls: Type[MethodWrapperT], m: types.MethodType) -> MethodWrapperT:
+  def wrap(cls: Type[MethodWrapperT],
+           m: types_module.MethodType) -> MethodWrapperT:
     """Wrap a method."""
     assert inspect.ismethod(m), 'Expected method.'
     assert m.__self__, 'Expected __self__ attribute on bound method.'
@@ -206,10 +208,10 @@ class Registry:
     if issubclass(resource, FunctionWrapper):
       return self._register_function_wrapper(resource)
 
-  def lookup(self, type_id: Union[str, interfaces.TypeKey]) -> (
+  def lookup(self, type_id: Union[str, types.TypeKey]) -> (
       Type[interfaces.ResourceBase]):
     """Looks up a resource type by name or type_info."""
-    if isinstance(type_id, interfaces.TypeKey):
+    if isinstance(type_id, types.TypeKey):
       type_id = type_id.type_id()
     resource_class = self._type_map.get(type_id)
     if not resource_class:
@@ -292,7 +294,7 @@ class Registry:
     if isinstance(value, FunctionWrapper):
       return value.wrapper_function()
     if isinstance(value, MethodWrapper):
-      return types.MethodType(
+      return types_module.MethodType(
         value.wrapper_function(), value.get_instance())
     return value
 
