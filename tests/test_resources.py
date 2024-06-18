@@ -16,11 +16,12 @@
 
 
 import dataclasses
-from typing import Any, Type
+from typing import Any, Dict, List, Optional, Type, Union
 import unittest
 
 import enact
 from enact import resource_registry
+from enact import types
 
 
 @enact.register
@@ -114,6 +115,7 @@ class ResourceTest(unittest.TestCase):
     self.assertEqual(r.i, rebuilt.i)
 
 class RefTest(unittest.TestCase):
+  """Tests for references."""
 
   def test_digest_identical(self):
     """Test that digest is identical for identical resources."""
@@ -187,3 +189,69 @@ class RefTest(unittest.TestCase):
     self.assertEqual(y, x)
     x.a.a = 5
     self.assertNotEqual(y, x)
+
+
+class MyClass:
+  """Test non-resource class"""
+  pass
+
+
+@enact.register
+class MyClassWrapper(enact.TypeWrapper[MyClass]):
+  """Wrapper for MyClass"""
+  @classmethod
+  def wrap(cls, unused_wrapped: MyClass) -> 'MyClassWrapper':
+    return cls()
+
+  @classmethod
+  def wrapped_type(cls) -> Type[MyClass]:
+    return MyClass
+
+  def unwrap(self) -> MyClass:
+    return MyClass()
+
+
+@dataclasses.dataclass
+class TypeExampleResource(enact.Resource):
+  """Test resource."""
+  bool_value: bool
+  bytes_value: 'bytes'
+  str_value: str
+  float_value: float
+  int_value: int
+  list_value: list
+  list_value_generic: List[int]
+  dict_value: dict
+  dict_value_generic: Dict[str, int]
+  a_value: 'TypeExampleResource'
+  a_list: List['TypeExampleResource']
+  a_dict: 'Dict[str, TypeExampleResource]'
+  union_value: Union[int, float]
+  optional_value: Optional[int]
+  wrapped_value: 'MyClass'
+
+
+class TypeDescriptorTests(unittest.TestCase):
+  """Tests automatic resolution of type descriptors."""
+
+  def test_field_descriptors(self):
+    """Tests that field descriptors are inferred correctly."""
+    descriptors = list(TypeExampleResource.field_descriptors())
+    self.assertEqual(descriptors, [
+      types.Bool(),
+      types.Bytes(),
+      types.Str(),
+      types.Float(),
+      types.Int(),
+      types.List(),
+      types.List(),
+      types.Dict(),
+      types.Dict(),
+      types.ResourceType(
+        TypeExampleResource.type_key()),
+      types.List(),
+      types.Dict(),
+      None,  # Union not supported
+      None,  # Optional not supported
+      types.ResourceType(MyClassWrapper.type_key())
+    ])
