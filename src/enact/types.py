@@ -14,6 +14,7 @@
 """A serializable type description language."""
 
 import abc
+import dataclasses
 import typing
 import json
 
@@ -75,6 +76,7 @@ class DistributionKey(typing.NamedTuple):
     return DistributionKey(**typing.cast(typing.Dict[str, str], d))
 
 
+@dataclasses.dataclass  # Type descriptors are dataclasses for value-semantics.
 class TypeDescriptor(abc.ABC):
   """Interface for type descriptors."""
 
@@ -111,7 +113,7 @@ class TypeDescriptor(abc.ABC):
       return ResourceType(TypeKey.from_dict(value))
     raise ValueError(f'Unknown type descriptor: {json_value}')
 
-
+@dataclasses.dataclass
 class Int(TypeDescriptor):
   """Describes an int value."""
 
@@ -119,6 +121,7 @@ class Int(TypeDescriptor):
     return INT_NAME
 
 
+@dataclasses.dataclass
 class Float(TypeDescriptor):
   """Describes a float value."""
 
@@ -126,6 +129,7 @@ class Float(TypeDescriptor):
     return FLOAT_NAME
 
 
+@dataclasses.dataclass
 class Str(TypeDescriptor):
   """Describes a string value."""
 
@@ -133,6 +137,7 @@ class Str(TypeDescriptor):
     return STR_NAME
 
 
+@dataclasses.dataclass
 class Bool(TypeDescriptor):
   """Describes a boolean value."""
 
@@ -140,6 +145,7 @@ class Bool(TypeDescriptor):
     return BOOL_NAME
 
 
+@dataclasses.dataclass
 class Bytes(TypeDescriptor):
   """Describes a bytes value."""
 
@@ -147,6 +153,7 @@ class Bytes(TypeDescriptor):
     return BYTES_NAME
 
 
+@dataclasses.dataclass
 class List(TypeDescriptor):
   """Describes a list value."""
 
@@ -154,6 +161,7 @@ class List(TypeDescriptor):
     return LIST_NAME
 
 
+@dataclasses.dataclass
 class Dict(TypeDescriptor):
   """Describes a dictionary value."""
 
@@ -161,6 +169,7 @@ class Dict(TypeDescriptor):
     return DICT_NAME
 
 
+@dataclasses.dataclass
 class ResourceType(TypeDescriptor):
   """Describes a resource type."""
 

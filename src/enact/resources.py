@@ -16,10 +16,13 @@
 
 import abc
 import dataclasses
-from typing import Iterable, Mapping, Type, TypeVar
+from typing import Iterable, Mapping, Optional, Type, TypeVar
+import typing
 
 from enact import interfaces
 from enact import resource_registry
+from enact import types
+from enact import type_inference
 
 
 FieldValue = interfaces.FieldValue
@@ -41,12 +44,24 @@ class _Resource(interfaces.ResourceBase):
       getattr(self, f)) for f in self.field_names())
 
   @classmethod
+  def field_descriptors(cls) -> Iterable[Optional[types.TypeDescriptor]]:
+    """Infer field descriptors from type annotations where possible."""
+    # We use get_type_hints since it resolves types specified as strings,
+    # whereas dataclasses.fields does not.
+    type_dict = typing.get_type_hints(cls)
+    return (
+      type_inference.from_annotation(type_dict.get(name))
+      for name in cls.field_names())
+
+  @classmethod
   def from_fields(cls: Type[C],
                   field_values: Mapping[str, FieldValue]) -> C:
     """Constructs the resource from a value dictionary."""
     field_values = {k: resource_registry.from_field_value(v)
                     for k, v in field_values.items()}
     return cls(**field_values)
+
+
 
 ResourceT = TypeVar('ResourceT', bound='Resource')
 
