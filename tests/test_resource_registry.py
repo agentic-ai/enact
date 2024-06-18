@@ -25,6 +25,7 @@ import enact
 from enact import resource_registry
 from enact import version
 from enact import distribution_registry
+from enact import types as enact_types
 
 
 @enact.register
@@ -278,6 +279,9 @@ class RegistryTest(unittest.TestCase):
     self.assertIsNot(copy[1], nest[1])
     self.assertIsNot(copy[1]['a'], nest[1]['a'])
 
+class DistributionInfoTests(unittest.TestCase):
+  """Tests the distribution info related functionality."""
+
   def test_enact_types_have_distribution_key(self):
     """Tests that type distribution key is present for enact types."""
     self.assertEqual(
@@ -300,6 +304,50 @@ class RegistryTest(unittest.TestCase):
       self.assertEqual(
         MyResource.type_distribution_key(),
         enact.DistributionKey('enact-tests', '0.0.1'))
+
+class TestToPythonType(unittest.TestCase):
+  """Tests casting type descriptors to python types."""
+
+  def test_to_from_python_type(self):
+    """Tests that type descriptors can be cast to python types."""
+    @enact.register
+    class MyResource(enact.Resource):
+      pass
+
+    @dataclasses.dataclass  # dataclass for value comparison.
+    class MyWrappedType:
+      pass
+
+    @enact.register
+    class MyWrapperType(enact.TypeWrapper[MyWrappedType]):
+      """Wrapper for testing."""
+      @classmethod
+      def wrap(cls, unused_wrapped: MyWrappedType) -> 'MyWrapperType':
+        return cls()
+      @classmethod
+      def wrapped_type(cls) -> Type[MyWrappedType]:
+        return MyWrappedType
+      def unwrap(self) -> MyWrappedType:
+        return MyWrappedType()
+
+    tests = {
+      int: enact_types.Int(),
+      str: enact_types.Str(),
+      float: enact_types.Float(),
+      bool: enact_types.Bool(),
+      bytes: enact_types.Bytes(),
+      list: enact_types.List(),
+      dict: enact_types.Dict(),
+      MyResource: enact_types.ResourceType(MyResource.type_key()),
+      MyWrappedType: enact_types.ResourceType(MyWrapperType.type_key()),
+    }
+
+    for python_type, descriptor in tests.items():
+      with self.subTest(python_type=python_type):
+        self.assertEqual(
+          resource_registry.to_python_type(descriptor), python_type)
+        self.assertEqual(
+          resource_registry.from_python_type(python_type), descriptor)
 
 
 if __name__ == 'main':

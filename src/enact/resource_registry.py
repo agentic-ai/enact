@@ -345,6 +345,53 @@ def unwrap_type(value: Type[interfaces.ResourceBase]) -> Type:
   return Registry.get().unwrap_type(value)
 
 
+def to_python_type(type_descriptor: types.TypeDescriptor) -> Type:
+  """Convert a type descriptor to a python type."""
+  if isinstance(type_descriptor, types.Int):
+    return int
+  if isinstance(type_descriptor, types.Str):
+    return str
+  if isinstance(type_descriptor, types.Float):
+    return float
+  if isinstance(type_descriptor, types.Bool):
+    return bool
+  if isinstance(type_descriptor, types.Bytes):
+    return bytes
+  if isinstance(type_descriptor, types.List):
+    return list
+  if isinstance(type_descriptor, types.Dict):
+    return dict
+  if isinstance(type_descriptor, types.ResourceType):
+    resource_type = Registry.get().lookup(type_descriptor.type_key)
+    if issubclass(resource_type, interfaces.TypeWrapperBase):
+      return resource_type.wrapped_type()
+    return resource_type
+  raise ValueError(f'Unknown type descriptor: {type_descriptor}')
+
+def from_python_type(t: Type) -> types.TypeDescriptor:
+  """Convert a python type to an enact type descriptor."""
+  if t == int:
+    return types.Int()
+  if t == str:
+    return types.Str()
+  if t == float:
+    return types.Float()
+  if t == bool:
+    return types.Bool()
+  if t == bytes:
+    return types.Bytes()
+  if t == list:
+    return types.List()
+  if t == dict:
+    return types.Dict()
+  if issubclass(t, interfaces.ResourceBase):
+    return types.ResourceType(t.type_key())
+  try:
+    return types.ResourceType(wrap_type(t).type_key())
+  except MissingWrapperError as e:
+    raise ValueError(f'Cannot convert type {t} to a type descriptor.') from e
+
+
 def deepcopy(value: WrappedT) -> WrappedT:
   """Deep copy a value."""
   if isinstance(value, interfaces.ResourceBase):

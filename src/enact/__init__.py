@@ -83,6 +83,8 @@ from enact.resource_registry import ResourceNotFound
 from enact.resource_registry import wrap
 from enact.resource_registry import unwrap
 from enact.resource_registry import deepcopy
+from enact.resource_registry import to_python_type
+from enact.resource_registry import from_python_type
 
 # Trigger registration of standard resource wrappers.
 import enact.type_wrappers
