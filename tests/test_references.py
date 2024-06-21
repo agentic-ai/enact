@@ -16,6 +16,7 @@
 
 import dataclasses
 import tempfile
+from typing import List
 import unittest
 
 import enact
@@ -110,7 +111,7 @@ class RefTest(unittest.TestCase):
   def test_ref_to_wrapped_type(self):
     """Tests references to wrapped python types."""
     value = 1
-    ref, packed = enact.Ref.pack(value)
+    ref, packed = enact.Ref.pack(resource_registry.wrap(value))
     self.assertIsInstance(
       resource_registry.from_resource_dict(packed.data),
       resource_registry.IntWrapper)
@@ -209,7 +210,7 @@ class StoreTest(unittest.TestCase):
     store = enact.Store()
     value = None
     ref = store.commit(value)
-    _, packed = ref.pack(value)
+    _, packed = ref.pack(resource_registry.wrap(value))
     ref.verify(packed.data)
 
   def test_packed_links(self):
@@ -264,7 +265,7 @@ class StoreTest(unittest.TestCase):
       r2 = enact.commit([(1,2)])  # tuple in list
       r3 = enact.Ref.from_id('{"digest": "fake_id"}')
       # pylint: disable=unbalanced-tuple-unpacking
-      t1, t2, t3 = backend.get_types((r1.id, r2.id, r3.id))
+      t1, t2, t3 = backend.get_type_keys((r1.id, r2.id, r3.id))
       self.assertIsNone(t3)
 
       expected_t1 = {
@@ -361,3 +362,21 @@ class StoreTest(unittest.TestCase):
         r4, expect_distribution_key=False)
 
       self.assertEqual(dist_requirements, expected_dist_requirements)
+
+  def test_type_registration(self):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      backends: List[references.StorageBackend] = [
+        enact.FileBackend(tmp_dir), enact.InMemoryBackend()]
+
+      for backend in backends:
+        with self.subTest(backend=type(backend).__name__):
+          with enact.Store(backend):
+            _ = enact.commit(SimpleResource(1, 2.0))
+            attributes = backend.get_type(SimpleResource.type_key())
+            self.assertEqual(
+              attributes,
+              {
+                'x': types.Int(),
+                'y': types.Float()
+              }
+            )

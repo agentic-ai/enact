@@ -23,7 +23,7 @@ import pickle
 
 from typing import (
   Any, Dict, Generic, Iterable, Iterator, List, Mapping, NamedTuple, Optional,
-  Set, Tuple, Type, TypeVar, cast)
+  Set, Tuple, Type, TypeVar, Union, cast)
 
 from enact import contexts
 from enact import digests
@@ -40,6 +40,7 @@ class RefError(Exception):
 
 
 R = TypeVar('R')
+ResourceT = TypeVar('ResourceT', bound=interfaces.ResourceBase)
 RefT = TypeVar('RefT', bound='Ref')
 
 
@@ -190,9 +191,8 @@ class Ref(Generic[R], interfaces.ResourceBase):
         resource_registry.from_resource_dict(packed_resource.data)))
 
   @classmethod
-  def pack(cls: Type[RefT], resource: R) -> Tuple[RefT, PackedResource]:
+  def pack(cls: Type[RefT], resource: ResourceT) -> Tuple[RefT, PackedResource]:
     """Wraps and packs the resource."""
-    as_resource = resource_registry.wrap(resource)
     # TODO: This should be improved since it walks the resource twice:
     #   1. Once for walk_resource
     #   2. Once for to_resource_dict.
@@ -200,10 +200,10 @@ class Ref(Generic[R], interfaces.ResourceBase):
     # Maybe add a visitor interface to 'to_resource_dict' function, instead of
     # using walk_resource.
     links = {
-      l.id for l in utils.walk_resource(as_resource) if isinstance(l, Ref)}
-    ref = cls.from_resource(as_resource)
+      l.id for l in utils.walk_resource(resource) if isinstance(l, Ref)}
+    ref = cls.from_resource(resource)
     return ref, PackedResource(
-      as_resource.to_resource_dict(),
+      resource.to_resource_dict(),
       ref_dict=ref.to_resource_dict(),
       links=links)
 
@@ -237,6 +237,17 @@ class StorageBackend(abc.ABC):
   """A storage backend."""
 
   @abc.abstractmethod
+  def register_type(self,
+                    type_key: types.TypeKey,
+                    attributes: Dict[str, Optional[types.TypeDescriptor]]):
+    """Register a new type to allow resource to be committed."""
+
+  @abc.abstractmethod
+  def get_type(self, type_key: types.TypeKey) -> (
+      Optional[Dict[str, Optional[types.TypeDescriptor]]]):
+    """Returns the type, if known."""
+
+  @abc.abstractmethod
   def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
 
@@ -258,7 +269,7 @@ class StorageBackend(abc.ABC):
       Returned in the order of the ref_ids argument.
     """
 
-  def get_types(
+  def get_type_keys(
       self, ref_ids: Iterable[str]) -> List[
         Optional[Set[types.TypeKey]]]:
     """Returns the types required to unpack the resources.
@@ -345,6 +356,22 @@ class InMemoryBackend(StorageBackend):
   def __init__(self):
     """Create a new in-memory backend."""
     self._resources: Dict[str, PackedResource] = {}
+    self._types: Dict[
+      types.TypeKey, Dict[str, Optional[types.TypeDescriptor]]] = {}
+
+  def register_type(self,
+                    type_key: types.TypeKey,
+                    attributes: Dict[str, Optional[types.TypeDescriptor]]):
+    """Register a new type to allow resource to be committed."""
+    if type_key in self._types and self._types[type_key] != attributes:
+      raise TypeKeyError(
+        f'Type {type_key} already registered with different attributes.')
+    self._types[type_key] = attributes
+
+  def get_type(self, type_key: types.TypeKey) -> (
+      Optional[Dict[str, Optional[types.TypeDescriptor]]]):
+    """Returns the type, if known."""
+    return self._types[type_key]
 
   def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
@@ -385,6 +412,33 @@ class FileBackend(StorageBackend):
     self._root_dir = root_dir
     self._serializer = serializer or serialization.JsonSerializer()
     self._use_base64_names = use_base64_names
+
+  def register_type(self,
+                    type_key: types.TypeKey,
+                    attributes: Dict[str, Optional[types.TypeDescriptor]]):
+    """Register a new type to allow resource to be committed."""
+    with open(self._get_type_path(type_key), 'wb') as file:
+      encoded_attrs = {
+        key: value.to_json() if value else None
+        for key, value in attributes.items()}
+      pickle.dump(encoded_attrs, file)
+
+  def get_type(self, type_key: types.TypeKey) -> (
+      Optional[Dict[str, Optional[types.TypeDescriptor]]]):
+    """Returns the type, if known."""
+    if not os.path.exists(self._get_type_path(type_key)):
+      return None
+    with open(self._get_type_path(type_key), 'rb') as f:
+      encoded_attrs = pickle.load(f)
+    assert isinstance(encoded_attrs, dict)
+    return {
+      key: types.TypeDescriptor.from_json(value)
+      for key, value in encoded_attrs.items()}
+
+  def _get_type_path(self, type_key: types.TypeKey) -> str:
+    type_id = json.dumps(type_key.as_dict()).encode('utf-8')
+    basename = f'type_{base64.b64encode(type_id).decode("utf-8")}'
+    return os.path.join(self._root_dir, basename)
 
   def _get_path(self, ref_id: str) -> str:
     basename = ref_id
@@ -445,9 +499,22 @@ class Store(contexts.Context):
     self._registry = registry
     self._ref_type = ref_type
 
+  def register_type(self, resource: Union[Type[R], R]):
+    """Explicitly register a type with the store."""
+    as_resource: Union[Type[interfaces.ResourceBase], interfaces.ResourceBase]
+    if isinstance(resource, type):
+      as_resource = resource_registry.wrap_type(resource)
+    else:
+      as_resource = resource_registry.wrap(resource)
+    attributes = dict(
+      zip(as_resource.field_names(), as_resource.field_descriptors()))
+    self._backend.register_type(as_resource.type_key(), attributes)
+
   def commit(self, resource: R) -> Ref[R]:
     """Commits a resource to the store."""
-    ref, packed_resource = self._ref_type.pack(resource)
+    as_resource = resource_registry.wrap(resource)
+    self.register_type(as_resource)
+    ref, packed_resource = self._ref_type.pack(as_resource)
     self._backend.commit(ref.id, packed_resource)
     return ref
 
@@ -475,7 +542,7 @@ class Store(contexts.Context):
       if deps is None:
         raise NotFound(f'Could not resolve transitive reference {ref_id}.')
       all_references.update(deps)
-    type_sets = self._backend.get_types(all_references)
+    type_sets = self._backend.get_type_keys(all_references)
     result: Set[types.TypeKey] = set()
     for typed_ref, type_set in zip(all_references, type_sets):
       if type_set is None:
