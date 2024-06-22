@@ -142,9 +142,7 @@ class Dict(TypeDescriptor):
 class ResourceType(TypeDescriptor):
   """Describes a resource type."""
   NAME: typing.ClassVar[str] = 'resource'
-
-  def __init__(self, type_key: TypeKey):
-    self.type_key = type_key
+  type_key: TypeKey
 
   def to_json(self):
     return {self.NAME: self.type_key.as_dict()}
