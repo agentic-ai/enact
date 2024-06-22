@@ -22,6 +22,11 @@ import json
 JsonLeaf = typing.Union[int, float, str, bool, None]
 Json = typing.Union[JsonLeaf, typing.List['Json'], typing.Dict[str, 'Json']]
 
+PRIMITIVES = (int, float, str, bytes, bool, type(None))
+
+Primitives = typing.Union[
+  int, float, str, bytes, bool, None]
+
 
 class TypeKey(typing.NamedTuple):
   """Information about a resource type."""

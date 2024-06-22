@@ -25,15 +25,8 @@ from enact import types
 
 
 
-PRIMITIVES = (int, float, str, bytes, bool, type(None))
-
-
-Primitives = Union[
-  int, float, str, bytes, bool, None]
-
-
 FieldValue = Union[
-  Primitives,
+  types.Primitives,
   'ResourceBase',
   Type['ResourceBase'],
   List['FieldValue'],
@@ -41,7 +34,7 @@ FieldValue = Union[
 
 
 ResourceDictValue = Union[
-  Primitives,
+  types.Primitives,
   Type['ResourceBase'],
   List['ResourceDictValue'],
   Dict[str, 'ResourceDictValue'],
@@ -139,7 +132,7 @@ class ResourceBase:
     with acyclic.AcyclicContext(value):
       if isinstance(value, ResourceBase):
         return value.to_resource_dict()
-      if isinstance(value, PRIMITIVES):
+      if isinstance(value, types.PRIMITIVES):
         return value
       if isinstance(value, type) and issubclass(value, ResourceBase):
         return value

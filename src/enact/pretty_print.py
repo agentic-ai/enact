@@ -21,6 +21,7 @@ from enact import interfaces
 from enact import invocations
 from enact import references
 from enact import resource_registry
+from enact import types
 
 
 @dataclasses.dataclass
@@ -62,7 +63,7 @@ class PPrinter:
       'Only types that are subclasses of ResourceBase are supported.')
     return PPValue(v.__name__, [])
 
-  def primitive_to_str(self, v: interfaces.Primitives) -> str:
+  def primitive_to_str(self, v: types.Primitives) -> str:
     """Converts a primitive to a string."""
     if isinstance(v, bytes):
       return f'<{len(v)} bytes>'
@@ -86,7 +87,7 @@ class PPrinter:
 
   def from_resource(self, v: interfaces.FieldValue, depth: int) -> PPValue:
     assert isinstance(v, interfaces.ResourceBase)
-    if all(isinstance(field_value, interfaces.PRIMITIVES)
+    if all(isinstance(field_value, types.PRIMITIVES)
            for field_value in v.field_values()):
       str_values = ', '.join([
         f'{field_name}={self.primitive_to_str(field_value)}'  # type: ignore
@@ -114,7 +115,7 @@ class PPrinter:
 
   def from_primitive(
       self, v: interfaces.FieldValue, unused_depth: int) -> PPValue:
-    assert isinstance(v, interfaces.PRIMITIVES)
+    assert isinstance(v, types.PRIMITIVES)
     return PPValue(self.primitive_to_str(v), [])
 
   def pvalue(

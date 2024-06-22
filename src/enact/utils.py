@@ -18,6 +18,7 @@ from enact import acyclic
 from enact import interfaces
 from enact import resource_digests
 from enact import resource_registry
+from enact import types
 
 # pylint: disable=invalid-name
 class cached_property(property):
@@ -87,7 +88,7 @@ def walk_resource(
     elif isinstance(value, list):
       for v in value:
         yield from walk_resource(v, include_self=True)
-    elif isinstance(value, interfaces.PRIMITIVES):
+    elif isinstance(value, types.PRIMITIVES):
       pass
     elif isinstance(value, type):
       pass
