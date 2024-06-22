@@ -22,15 +22,6 @@ import json
 JsonLeaf = typing.Union[int, float, str, bool, None]
 Json = typing.Union[JsonLeaf, typing.List['Json'], typing.Dict[str, 'Json']]
 
-INT_NAME = 'int'
-STR_NAME = 'str'
-FLOAT_NAME = 'float'
-BOOL_NAME = 'bool'
-BYTES_NAME = 'bytes'
-LIST_NAME = 'list'
-DICT_NAME = 'dict'
-RESOURCE_NAME = 'resource'
-
 
 class TypeKey(typing.NamedTuple):
   """Information about a resource type."""
@@ -79,102 +70,81 @@ class DistributionKey(typing.NamedTuple):
 @dataclasses.dataclass  # Type descriptors are dataclasses for value-semantics.
 class TypeDescriptor(abc.ABC):
   """Interface for type descriptors."""
+  NAME: typing.ClassVar[str] = ''
 
-  @abc.abstractmethod
   def to_json(self) -> Json:
     """JSON representation."""
+    return self.NAME
 
   @staticmethod
   def from_json(json_value: Json) -> 'TypeDescriptor':
     """Constructs a descriptor from JSON."""
-    if json_value == INT_NAME:
-      return Int()
-    if json_value == STR_NAME:
-      return Str()
-    if json_value == FLOAT_NAME:
-      return Float()
-    if json_value == BOOL_NAME:
-      return Bool()
-    if json_value == BYTES_NAME:
-      return Bytes()
-    if json_value == LIST_NAME:
-      return List()
-    if json_value == DICT_NAME:
-      return Dict()
+    cls: typing.Type[TypeDescriptor]
+    for cls in [Int, Float, Str, Bool, Bytes, List, Dict]:
+      if json_value == cls.NAME:
+        return cls()
     if not isinstance(json_value, dict) or len(json_value) != 1:
       raise ValueError(
         f'Expected a dictionary of length 1 for complex type descriptor: '
         f'{json_value}')
-    if RESOURCE_NAME in json_value:
-      value = json_value[RESOURCE_NAME]
+    if ResourceType.NAME in json_value:
+      value = json_value[ResourceType.NAME]
       if not isinstance(value, dict):
         raise ValueError(f'Expected a dictionary for resource type descriptor: '
                          f'{json_value}')
       return ResourceType(TypeKey.from_dict(value))
     raise ValueError(f'Unknown type descriptor: {json_value}')
 
+
 @dataclasses.dataclass
 class Int(TypeDescriptor):
   """Describes an int value."""
-
-  def to_json(self):
-    return INT_NAME
+  NAME: typing.ClassVar[str] = 'int'
 
 
 @dataclasses.dataclass
 class Float(TypeDescriptor):
   """Describes a float value."""
-
-  def to_json(self):
-    return FLOAT_NAME
+  NAME: typing.ClassVar[str] = 'float'
 
 
 @dataclasses.dataclass
 class Str(TypeDescriptor):
   """Describes a string value."""
-
-  def to_json(self):
-    return STR_NAME
+  NAME: typing.ClassVar[str] = 'str'
 
 
 @dataclasses.dataclass
 class Bool(TypeDescriptor):
   """Describes a boolean value."""
-
-  def to_json(self):
-    return BOOL_NAME
+  NAME: typing.ClassVar[str] = 'bool'
 
 
 @dataclasses.dataclass
 class Bytes(TypeDescriptor):
   """Describes a bytes value."""
-
-  def to_json(self):
-    return BYTES_NAME
+  NAME: typing.ClassVar[str] = 'bytes'
 
 
 @dataclasses.dataclass
 class List(TypeDescriptor):
   """Describes a list value."""
-
-  def to_json(self):
-    return LIST_NAME
+  NAME: typing.ClassVar[str] = 'list'
 
 
 @dataclasses.dataclass
 class Dict(TypeDescriptor):
   """Describes a dictionary value."""
-
-  def to_json(self):
-    return DICT_NAME
+  NAME: typing.ClassVar[str] = 'dict'
 
 
 @dataclasses.dataclass
 class ResourceType(TypeDescriptor):
   """Describes a resource type."""
+  NAME: typing.ClassVar[str] = 'resource'
 
   def __init__(self, type_key: TypeKey):
     self.type_key = type_key
 
   def to_json(self):
-    return {RESOURCE_NAME: self.type_key.as_dict()}
+    return {self.NAME: self.type_key.as_dict()}
