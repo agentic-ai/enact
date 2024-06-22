@@ -142,7 +142,7 @@ class Registry:
   def _from_dict_value(self, value: interfaces.ResourceDictValue) -> (
       interfaces.FieldValue):
     """Transforms a resource dict value to a field value."""
-    if isinstance(value, interfaces.PRIMITIVES):
+    if isinstance(value, types.PRIMITIVES):
       return value
     if isinstance(value, type) and issubclass(value, interfaces.ResourceBase):
       return value
@@ -412,7 +412,7 @@ def _ensure_str_key(s: Any) -> str:
 
 def to_field_value(value: Any) -> interfaces.FieldValue:
   """Wrap a value as a field value."""
-  if isinstance(value, interfaces.PRIMITIVES):
+  if isinstance(value, types.PRIMITIVES):
     return value
   if isinstance(value, list):
     return [to_field_value(x) for x in value]
