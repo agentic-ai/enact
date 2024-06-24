@@ -22,6 +22,7 @@ import PIL.Image
 import enact
 
 from enact import type_wrappers
+from enact import types
 
 
 class TestTypeWrappers(unittest.TestCase):
@@ -32,6 +33,8 @@ class TestTypeWrappers(unittest.TestCase):
     (type_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
     (type_wrappers.TupleWrapper, (1, 2, 3)),
     (type_wrappers.SetWrapper, {1, 2, 3}),
+    (type_wrappers.TypeDescriptorWrapper, types.ResourceType(
+      type_wrappers.SetWrapper.type_key())),
     (type_wrappers.NPFloat16Wrapper, np.float16(1.0)),
     (type_wrappers.NPFloat32Wrapper, np.float32(1.0)),
     (type_wrappers.NPFloat64Wrapper, np.float64(1.0)),

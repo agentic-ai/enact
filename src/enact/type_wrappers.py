@@ -23,6 +23,7 @@ import PIL.Image
 
 from enact import resources
 from enact import registration
+from enact import types
 
 
 @registration.register
@@ -71,6 +72,28 @@ class SetWrapper(resources.TypeWrapper[set]):
   def unwrap(self) -> set:
     """Unwrap the tuple."""
     return set(self.value)
+
+
+@registration.register
+@dataclasses.dataclass
+class TypeDescriptorWrapper(resources.TypeWrapper[types.TypeDescriptor]):
+  """Wrapper for tuples."""
+  json: types.Json
+
+  @classmethod
+  def wrapped_type(cls) -> Type[types.TypeDescriptor]:
+    return types.TypeDescriptor
+
+  @classmethod
+  def wrap(cls, value: types.TypeDescriptor) -> 'TypeDescriptorWrapper':
+    """Wrap a tuple value directly."""
+    assert isinstance(value, types.TypeDescriptor), (
+      f'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return cls(value.to_json())
+
+  def unwrap(self) -> types.TypeDescriptor:
+    """Unwrap the tuple."""
+    return types.TypeDescriptor.from_json(self.json)
 
 
 @registration.register
