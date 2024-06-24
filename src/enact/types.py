@@ -85,7 +85,7 @@ class TypeDescriptor(abc.ABC):
   def from_json(json_value: Json) -> 'TypeDescriptor':
     """Constructs a descriptor from JSON."""
     cls: typing.Type[TypeDescriptor]
-    for cls in [Int, Float, Str, Bool, Bytes, List, Dict]:
+    for cls in BASIC_TYPE_DESCRIPTOR_CLASSES:
       if json_value == cls.NAME:
         return cls()
     if not isinstance(json_value, dict) or len(json_value) != 1:
@@ -95,8 +95,9 @@ class TypeDescriptor(abc.ABC):
     if ResourceType.NAME in json_value:
       value = json_value[ResourceType.NAME]
       if not isinstance(value, dict):
-        raise ValueError(f'Expected a dictionary for resource type descriptor: '
-                         f'{json_value}')
+        raise ValueError(
+          f'Expected a dictionary for resource type descriptor: '
+          f'{json_value}')
       return ResourceType(TypeKey.from_dict(value))
     raise ValueError(f'Unknown type descriptor: {json_value}')
 
@@ -151,3 +152,6 @@ class ResourceType(TypeDescriptor):
 
   def to_json(self):
     return {self.NAME: self.type_key.as_dict()}
+
+
+BASIC_TYPE_DESCRIPTOR_CLASSES = (Int, Float, Str, Bool, Bytes, List, Dict)
