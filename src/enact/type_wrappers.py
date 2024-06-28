@@ -57,7 +57,7 @@ class TupleWrapper(resources.TypeWrapper[tuple]):
 @registration.register
 @dataclasses.dataclass
 class SetWrapper(resources.TypeWrapper[set]):
-  """Wrapper for tuples."""
+  """Wrapper for sets."""
   value: list
 
   @classmethod
@@ -66,20 +66,20 @@ class SetWrapper(resources.TypeWrapper[set]):
 
   @classmethod
   def wrap(cls, value: set) -> 'SetWrapper':
-    """Wrap a tuple value directly."""
+    """Wrap a set value directly."""
     assert isinstance(value, set), (
       f'Cannot wrap value of type {type(value)} with wrapper {cls}.')
     return cls(list(value))
 
   def unwrap(self) -> set:
-    """Unwrap the tuple."""
+    """Unwrap the set."""
     return set(self.value)
 
 
 @registration.register
 @dataclasses.dataclass
 class TypeDescriptorWrapper(resources.TypeWrapper[types.TypeDescriptor]):
-  """Wrapper for tuples."""
+  """Wrapper for TypeDescriptors."""
   json: types.Json
 
   @classmethod
@@ -88,13 +88,13 @@ class TypeDescriptorWrapper(resources.TypeWrapper[types.TypeDescriptor]):
 
   @classmethod
   def wrap(cls, value: types.TypeDescriptor) -> 'TypeDescriptorWrapper':
-    """Wrap a tuple value directly."""
+    """Wrap a type descriptor."""
     assert isinstance(value, types.TypeDescriptor), (
       f'Cannot wrap value of type {type(value)} with wrapper {cls}.')
     return cls(value.to_json())
 
   def unwrap(self) -> types.TypeDescriptor:
-    """Unwrap the tuple."""
+    """Unwrap the type descriptor."""
     return types.TypeDescriptor.from_json(self.json)
 
 
@@ -107,6 +107,7 @@ class ModuleWrapper(resources.TypeWrapper[python_types.ModuleType]):
 
   @classmethod
   def wrapped_type(cls) -> Type[python_types.ModuleType]:
+    """Returns the type of the wrapped resource."""
     # We could use any module here instead of sys, we just want to access
     # # <class 'module'>.
     return type(sys)
@@ -119,7 +120,7 @@ class ModuleWrapper(resources.TypeWrapper[python_types.ModuleType]):
     return cls(value.__name__)
 
   def unwrap(self) -> python_types.ModuleType:
-    """Unwrap the tuple."""
+    """Unwrap the module."""
     if self.name not in sys.modules:
       raise ValueError(
         f'Module {self.name} not found in sys.modules. Please make sure it '
