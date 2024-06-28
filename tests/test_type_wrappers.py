@@ -42,6 +42,7 @@ class TestTypeWrappers(unittest.TestCase):
     (type_wrappers.NPInt16Wrapper, np.int16(1)),
     (type_wrappers.NPInt32Wrapper, np.int32(1)),
     (type_wrappers.NPInt64Wrapper, np.int64(1)),
+    (type_wrappers.ModuleWrapper, np),
   ]
 
   def setUp(self):
@@ -50,16 +51,17 @@ class TestTypeWrappers(unittest.TestCase):
 
   def test_ref_deref(self):
     """Test storing and dereferencing a resource from a store."""
-    for resource_type, value in self.TYPES:
-      with self.subTest(resource_type=resource_type):
-        restored = self.store.commit(value).checkout()
-        self.assertIsInstance(restored, type(value))
-        if isinstance(restored, np.ndarray):
-          assert isinstance(value, np.ndarray)
-          self.assertSequenceEqual(restored.tolist(), value.tolist())
-        elif isinstance(restored, PIL.Image.Image):
-          assert isinstance(value, PIL.Image.Image)
-          self.assertSequenceEqual(list(restored.getdata()),
-                                   list(value.getdata()))
-        else:
-          self.assertEqual(restored, value)
+    with self.store:
+      for resource_type, value in self.TYPES:
+        with self.subTest(resource_type=resource_type):
+          restored = self.store.commit(value).checkout()
+          self.assertIsInstance(restored, type(value))
+          if isinstance(restored, np.ndarray):
+            assert isinstance(value, np.ndarray)
+            self.assertSequenceEqual(restored.tolist(), value.tolist())
+          elif isinstance(restored, PIL.Image.Image):
+            assert isinstance(value, PIL.Image.Image)
+            self.assertSequenceEqual(list(restored.getdata()),
+                                     list(value.getdata()))
+          else:
+            self.assertEqual(restored, value)
