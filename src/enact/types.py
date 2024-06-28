@@ -145,6 +145,12 @@ class Dict(TypeDescriptor):
 
 
 @dataclasses.dataclass
+class NoneType(TypeDescriptor):
+  """Describes a none type."""
+  NAME: typing.ClassVar[str] = 'none'
+
+
+@dataclasses.dataclass
 class ResourceType(TypeDescriptor):
   """Describes a resource type."""
   NAME: typing.ClassVar[str] = 'resource'
@@ -154,4 +160,5 @@ class ResourceType(TypeDescriptor):
     return {self.NAME: self.type_key.as_dict()}
 
 
-BASIC_TYPE_DESCRIPTOR_CLASSES = (Int, Float, Str, Bool, Bytes, List, Dict)
+BASIC_TYPE_DESCRIPTOR_CLASSES = (
+  Int, Float, Str, Bool, Bytes, List, Dict, NoneType)
