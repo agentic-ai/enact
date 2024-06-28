@@ -16,6 +16,8 @@
 
 import dataclasses
 import io
+import types as python_types
+import sys
 from typing import Type, TypeVar, Union
 
 import numpy as np
@@ -94,6 +96,35 @@ class TypeDescriptorWrapper(resources.TypeWrapper[types.TypeDescriptor]):
   def unwrap(self) -> types.TypeDescriptor:
     """Unwrap the tuple."""
     return types.TypeDescriptor.from_json(self.json)
+
+
+@registration.register
+@dataclasses.dataclass
+class ModuleWrapper(resources.TypeWrapper[python_types.ModuleType]):
+  """Wrapper for python modules."""
+  # TODO: Figure out a way to track type dependencies of a module wrapper.
+  name: str
+
+  @classmethod
+  def wrapped_type(cls) -> Type[python_types.ModuleType]:
+    # We could use any module here instead of sys, we just want to access
+    # # <class 'module'>.
+    return type(sys)
+
+  @classmethod
+  def wrap(cls, value: python_types.ModuleType) -> 'ModuleWrapper':
+    """Wrap a python module."""
+    assert isinstance(value, python_types.ModuleType), (
+      f'Cannot wrap value of type {type(value)} with wrapper {cls}.')
+    return cls(value.__name__)
+
+  def unwrap(self) -> python_types.ModuleType:
+    """Unwrap the tuple."""
+    if self.name not in sys.modules:
+      raise ValueError(
+        f'Module {self.name} not found in sys.modules. Please make sure it '
+        f'is imported before attempting to check out its reference.')
+    return sys.modules[self.name]
 
 
 @registration.register
