@@ -146,7 +146,7 @@ class Dict(TypeDescriptor):
 
 @dataclasses.dataclass
 class NoneType(TypeDescriptor):
-  """Describes a none type."""
+  """Describes a None type."""
   NAME: typing.ClassVar[str] = 'none'
 
 
