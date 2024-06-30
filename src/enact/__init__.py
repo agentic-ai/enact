@@ -19,6 +19,7 @@ from enact.distribution_registry import get_path_distribution_key
 from enact.distribution_registry import get_distribution_key
 from enact.types import DistributionKey
 from enact.types import TypeKey
+from enact.types import TypeDescriptor
 
 from enact.version import __version__
 from enact.function_wrappers import invoke

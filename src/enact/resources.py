@@ -48,7 +48,11 @@ class _Resource(interfaces.ResourceBase):
     """Infer field descriptors from type annotations where possible."""
     # We use get_type_hints since it resolves types specified as strings,
     # whereas dataclasses.fields does not.
-    type_dict = typing.get_type_hints(cls)
+    try:
+      type_dict = typing.get_type_hints(cls)
+    except NameError:
+      # This can happen for some type definitions.
+      return (None for _ in cls.field_names())
     return (
       type_inference.from_annotation(type_dict.get(name))
       for name in cls.field_names())
