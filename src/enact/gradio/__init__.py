@@ -16,8 +16,9 @@
 
 try:
   import gradio  # type: ignore
+  import PIL.Image  # type: ignore
 except ModuleNotFoundError as e:
   raise ModuleNotFoundError(
-      'Please install gradio to enable enact.gradio') from e
+      'Please install gradio and Pillow to enable enact.gradio') from e
 
 from enact.gradio.gradio import *
