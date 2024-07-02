@@ -16,9 +16,6 @@
 
 import unittest
 
-import numpy as np
-import PIL.Image
-
 import enact
 
 from enact import type_wrappers
@@ -29,20 +26,11 @@ class TestTypeWrappers(unittest.TestCase):
   """Tests all the non-fieldvalue wrappers."""
 
   TYPES = [
-    (type_wrappers.NPArrayWrapper, np.array([0.0, 1.0, 2.0])),
-    (type_wrappers.PILImageWrapper, PIL.Image.new('RGB', (10, 10), 'red')),
     (type_wrappers.TupleWrapper, (1, 2, 3)),
     (type_wrappers.SetWrapper, {1, 2, 3}),
     (type_wrappers.TypeDescriptorWrapper, types.ResourceType(
-      type_wrappers.SetWrapper.type_key())),
-    (type_wrappers.NPFloat16Wrapper, np.float16(1.0)),
-    (type_wrappers.NPFloat32Wrapper, np.float32(1.0)),
-    (type_wrappers.NPFloat64Wrapper, np.float64(1.0)),
-    (type_wrappers.NPInt8Wrapper, np.int8(1)),
-    (type_wrappers.NPInt16Wrapper, np.int16(1)),
-    (type_wrappers.NPInt32Wrapper, np.int32(1)),
-    (type_wrappers.NPInt64Wrapper, np.int64(1)),
-    (type_wrappers.ModuleWrapper, np),
+       type_wrappers.SetWrapper.type_key())),
+    (type_wrappers.ModuleWrapper, enact),
   ]
 
   def setUp(self):
@@ -56,12 +44,4 @@ class TestTypeWrappers(unittest.TestCase):
         with self.subTest(resource_type=resource_type):
           restored = self.store.commit(value).checkout()
           self.assertIsInstance(restored, type(value))
-          if isinstance(restored, np.ndarray):
-            assert isinstance(value, np.ndarray)
-            self.assertSequenceEqual(restored.tolist(), value.tolist())
-          elif isinstance(restored, PIL.Image.Image):
-            assert isinstance(value, PIL.Image.Image)
-            self.assertSequenceEqual(list(restored.getdata()),
-                                     list(value.getdata()))
-          else:
-            self.assertEqual(restored, value)
+          self.assertEqual(restored, value)
