@@ -134,8 +134,8 @@ _Output:_
 
 ### Making your types enact compatible
 
-Enact has built-in support for basic python datatypes and a few other common
-types common to generative software, such as numpy arrays and pillow images.
+Enact has built-in support for basic python datatypes such as primitives,
+lists, sets, dictionaries and tuples.
 
 If you need support for additional types, you can either define them as
 `Resource` dataclasses in the framework or define a wrapper.
