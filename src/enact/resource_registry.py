@@ -368,7 +368,7 @@ def to_python_type(type_descriptor: types.TypeDescriptor) -> Type:
     return resource_type
   raise ValueError(f'Unknown type descriptor: {type_descriptor}')
 
-def from_python_type(t: Type) -> types.TypeDescriptor:
+def from_python_type(t: Optional[Type]) -> types.TypeDescriptor:
   """Convert a python type to an enact type descriptor."""
   if t == int:
     return types.Int()
@@ -384,6 +384,8 @@ def from_python_type(t: Type) -> types.TypeDescriptor:
     return types.List()
   if t == dict:
     return types.Dict()
+  if t is None or t == type(None):
+    return types.NoneType()
   if issubclass(t, interfaces.ResourceBase):
     return types.ResourceType(t.type_key())
   try:
