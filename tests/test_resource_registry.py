@@ -338,6 +338,7 @@ class TestToPythonType(unittest.TestCase):
       bytes: enact_types.Bytes(),
       list: enact_types.List(),
       dict: enact_types.Dict(),
+      type(None): enact_types.NoneType(),
       MyResource: enact_types.ResourceType(MyResource.type_key()),
       MyWrappedType: enact_types.ResourceType(MyWrapperType.type_key()),
     }
