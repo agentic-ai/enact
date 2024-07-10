@@ -101,6 +101,10 @@ class TypeDescriptor(abc.ABC):
       return ResourceType(TypeKey.from_dict(value))
     raise ValueError(f'Unknown type descriptor: {json_value}')
 
+  def pformat(self) -> str:
+    """Pretty formats the descriptor."""
+    return self.NAME
+
 
 @dataclasses.dataclass
 class Int(TypeDescriptor):
@@ -158,6 +162,12 @@ class ResourceType(TypeDescriptor):
 
   def to_json(self):
     return {self.NAME: self.type_key.as_dict()}
+
+  def pformat(self) -> str:
+    """Pretty formats the descriptor."""
+    if self.type_key.distribution_key:
+      return f'{self.type_key.name} ({self.type_key.distribution_key.name})'
+    return self.type_key.name
 
 
 BASIC_TYPE_DESCRIPTOR_CLASSES = (
