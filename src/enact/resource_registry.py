@@ -361,6 +361,8 @@ def to_python_type(type_descriptor: types.TypeDescriptor) -> Type:
     return list
   if isinstance(type_descriptor, types.Dict):
     return dict
+  if isinstance(type_descriptor, types.NoneType):
+    return type(None)
   if isinstance(type_descriptor, types.ResourceType):
     resource_type = Registry.get().lookup(type_descriptor.type_key)
     if issubclass(resource_type, interfaces.TypeWrapperBase):
