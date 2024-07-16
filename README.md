@@ -210,10 +210,9 @@ _Output:_
 
 ## Documentation
 
-Full documentation is work in progress.  See the
-[quickstart](examples/quickstart.ipynb) and [enact
-concepts](examples/enact_concepts.ipynb) for more information.
-And take a look at other [examples](examples/).
+Full documentation is work in progress.
+See [enact concepts](examples/enact_concepts.ipynb) for more information and
+take a look at the [examples](examples/).
 
 ## Why enact - A manifesto
 
