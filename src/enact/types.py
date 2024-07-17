@@ -49,7 +49,9 @@ class TypeKey(typing.NamedTuple):
   def from_dict(d: typing.Dict[str, Json]) -> 'TypeKey':
     """Instantiate TypeKey from a dictionary."""
     r: typing.Dict = dict(d)
-    r['distribution_key'] = DistributionKey.from_dict(r['distribution_key'])
+    dist_key = r['distribution_key']
+    if dist_key is not None:
+      r['distribution_key'] = DistributionKey.from_dict(r['distribution_key'])
     return TypeKey(**r)
 
 
