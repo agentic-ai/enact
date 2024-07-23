@@ -284,25 +284,25 @@ class StoreTest(unittest.TestCase):
 
   def test_backend_get_dependency_graph(self):
     """Tests that getting dependency graphs works."""
-    backend = enact.InMemoryBackend()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      for store in (enact.InMemoryStore(), enact.FileStore(tmp_dir)):
+        with store:
+          r1 = enact.commit(5)
+          r2 = enact.commit([r1])
+          r3 = enact.commit([r1])
+          r4 = enact.commit([r2, r3, r1])
+          fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
 
-    with enact.Store(backend):
-      r1 = enact.commit(5)
-      r2 = enact.commit([r1])
-      r3 = enact.commit([r1])
-      r4 = enact.commit([r2, r3, r1])
-      fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
+          graph = store.get_dependency_graph(
+            (r1, r2, r3, r4, fake_ref))
+          expected_graph = {
+            r4: {r2, r3, r1},
+            r3: {r1},
+            r2: {r1},
+            r1: set(),
+            fake_ref: None}
 
-      graph = backend.get_dependency_graph(
-        (r1.id, r2.id, r3.id, r4.id, fake_ref.id))
-      expected_graph = {
-        r4.id: {r2.id, r3.id, r1.id},
-        r3.id: {r1.id},
-        r2.id: {r1.id},
-        r1.id: set(),
-        fake_ref.id: None}
-
-      self.assertEqual(graph, expected_graph)
+          self.assertEqual(graph, expected_graph)
 
   def test_backend_get_dependency_graph_depth(self):
     """Tests that getting dependency graphs up to a certain depth works."""
