@@ -572,6 +572,18 @@ class Store(contexts.Context):
         result.add(type_info.distribution_key)
     return result
 
+  def get_dependency_graph(
+      self,
+      refs: Iterable[Ref],
+      max_depth: Optional[int]=None) -> Dict[Ref, Optional[Set[Ref]]]:
+    """Return a dependency graph over references."""
+    graph = self._backend.get_dependency_graph(
+      [ref.id for ref in refs], max_depth)
+    return {
+      Ref.from_id(ref):
+        {Ref.from_id(dep) for dep in deps} if deps is not None else None
+      for ref, deps in graph.items()}
+
 
 @contexts.register_to_superclass(Store)
 class FileStore(Store):
