@@ -134,14 +134,14 @@ class Context(_ContextBase):
     except ContextTypeError:
       pass   #  We don't care here if the context has the wrong type.
     self.enter()
-    self._token = context_var.set(self)
+    self._token = context_var.set(self)  # type: ignore
     return self
 
   def __exit__(self: ContextT, exc_type, exc_value, traceback):
     """Exits the context."""
     context_var = self._get_context_var()
     assert self._token
-    context_var.reset(self._token)
+    context_var.reset(self._token)  # type: ignore
     self.exit()
     self._token = None
 
@@ -163,7 +163,7 @@ class AsyncContext(_ContextBase):
     except ContextTypeError:
       pass   #  We don't care here if the context has the wrong type.
     await self.aenter()
-    self._token = context_var.set(self)
+    self._token = context_var.set(self)  # type: ignore
     return self
 
   async def __aexit__(self, exc_type, exc_value, traceback):
