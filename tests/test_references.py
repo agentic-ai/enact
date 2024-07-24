@@ -164,6 +164,13 @@ class StoreTest(unittest.TestCase):
         ref = store.commit(val)
         self.assertEqual(store.checkout(ref), val)
 
+  def test_caching_none(self):
+    """Tests that caching None works correctly."""
+    store = enact.Store()
+    ref = store.commit(None)
+    self.assertTrue(ref.is_cached())
+    self.assertIsNone(ref.checkout())
+
   def test_caching(self):
     """Test that caching works correctly."""
     store = enact.Store()
@@ -171,7 +178,9 @@ class StoreTest(unittest.TestCase):
     ref = store.commit(resource)
 
     # checkout() works because cached reference is correct.
+    self.assertTrue(ref.is_cached())
     ref.checkout().x = 10
+    self.assertFalse(ref.is_cached())
 
     # checkout() fails because cached reference is incorrect.
     with self.assertRaises(contexts.NoActiveContext):
