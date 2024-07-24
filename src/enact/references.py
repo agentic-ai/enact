@@ -286,7 +286,7 @@ class StorageBackend(abc.ABC):
 
   async def commit_async(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
-    return self.commit(ref_id, packed_resource)
+    self.commit(ref_id, packed_resource)
 
   @abc.abstractmethod
   def has(self, ref_ids: Iterable[str]) -> List[bool]:
