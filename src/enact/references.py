@@ -71,9 +71,19 @@ def checkout(ref: 'Ref[R]') -> R:
   return ref.checkout()
 
 
+async def checkout_async(ref: 'Ref[R]') -> R:
+  """Gets the reference or asserts false if None."""
+  return await ref.checkout_async()
+
+
 def commit(resource: R) -> 'Ref[R]':
   """Commits a value to the store and returns a reference."""
   return Store.current().commit(resource)
+
+
+async def commit_async(resource: R) -> 'Ref[R]':
+  """Commits a value to the store and returns a reference."""
+  return await Store.current().commit_async(resource)
 
 
 @resource_registry.register
@@ -142,10 +152,15 @@ class Ref(Generic[R], interfaces.ResourceBase):
 
   def checkout(self) -> R:
     """Fetches the resource from the cache or active store."""
-    if (self._cached is None or
-        self.from_resource(resource_registry.wrap(self._cached)) != self):
+    if not self.is_cached():
       self._set_cache(Store.current().checkout(self))
-    return cast(R, self._cached)
+    return cast(R, self._cached[0])
+
+  async def checkout_async(self) -> R:
+    """Fetches the resource from the cache or active store."""
+    if not self.is_cached():
+      self._set_cache(await Store.current().checkout_async(self))
+    return cast(R, self._cached[0])
 
   def __call__(self) -> R:
     """Alias for get."""
@@ -248,18 +263,38 @@ class StorageBackend(abc.ABC):
                     attributes: Dict[str, Optional[types.TypeDescriptor]]):
     """Register a new type to allow resource to be committed."""
 
+  async def register_type_async(
+      self,
+      type_key: types.TypeKey,
+      attributes: Dict[str, Optional[types.TypeDescriptor]]):
+    """Register a new type to allow resource to be committed."""
+    return self.register_type(type_key, attributes)
+
   @abc.abstractmethod
   def get_type(self, type_key: types.TypeKey) -> (
       Optional[Dict[str, Optional[types.TypeDescriptor]]]):
     """Returns the type, if known."""
 
+  async def get_type_async(self, type_key: types.TypeKey) -> (
+      Optional[Dict[str, Optional[types.TypeDescriptor]]]):
+    """Returns the type, if known."""
+    return self.get_type(type_key)
+
   @abc.abstractmethod
   def commit(self, ref_id: str, packed_resource: PackedResource):
     """Stores a packed resource."""
 
+  async def commit_async(self, ref_id: str, packed_resource: PackedResource):
+    """Stores a packed resource."""
+    return self.commit(ref_id, packed_resource)
+
   @abc.abstractmethod
   def has(self, ref_ids: Iterable[str]) -> List[bool]:
     """Returns whether the storage backend has the resource."""
+
+  async def has_async(self, ref_ids: Iterable[str]) -> List[bool]:
+    """Returns whether the storage backend has the resource."""
+    return self.has(ref_ids)
 
   @abc.abstractmethod
   def checkout(
@@ -274,6 +309,20 @@ class StorageBackend(abc.ABC):
       A list of packed resources or None if the resource is not available.
       Returned in the order of the ref_ids argument.
     """
+
+  async def checkout_async(
+      self, ref_ids: Iterable[str]) -> (
+        List[Optional[PackedResource]]):
+    """Returns a dictionary of resources or None if not available.
+
+    Args:
+      ref_ids: The reference IDs to retrieve.
+
+    Returns:
+      A list of packed resources or None if the resource is not available.
+      Returned in the order of the ref_ids argument.
+    """
+    return self.checkout(ref_ids)
 
   def get_type_keys(
       self, ref_ids: Iterable[str]) -> List[
@@ -302,6 +351,23 @@ class StorageBackend(abc.ABC):
       else:
         result.append(None)
     return result
+
+  async def get_type_keys_async(
+      self, ref_ids: Iterable[str]) -> List[
+        Optional[Set[types.TypeKey]]]:
+    """Returns the types required to unpack the resources.
+
+    The default implementation will load all resource data and extract only
+    the type info. This should be overridden if more efficiency is required.
+
+    Args:
+      ref_ids: The reference IDs to retrieve.
+
+    Returns:
+      A list of sets of types or None, in the order of the ref_ids argument.
+      None is returned if a reference cannot be resolved.
+    """
+    return self.get_type_keys(ref_ids)
 
   def get_dependency_graph(
       self,
@@ -350,6 +416,31 @@ class StorageBackend(abc.ABC):
       depth += 1
       this_level = next_level
     return result
+
+  async def get_dependency_graph_async(
+      self,
+      ref_ids: Iterable[str],
+      max_depth: Optional[int]=None) -> Dict[str, Optional[Set[str]]]:
+    """Return the dependency graph for the input references.
+
+    The default implementation will load all resource data and extract only
+    the reference graph. This should be overridden if more efficiency is
+    required.
+
+    Args:
+      ref_dict: The reference to retrieve dependencies for, encoded as a
+        resource_dict.
+      max_depth: The maximum depth to retrieve dependencies. If None, all
+        dependencies will be retrieved.
+
+    Returns:
+      A dictionary from reference IDs to sets of references that the key
+      depends on directly. An unknown reference will map to None. The set of
+      keys in the returned dictionary will contain the IDs of the references
+      in ref_dicts and all references that they depend on up to the specified
+      depth.
+    """
+    return self.get_dependency_graph(ref_ids, max_depth)
 
 
 class NotFound(Exception):
@@ -489,7 +580,6 @@ class TypeKeyError(Exception):
   """Raised when there is an issue with type key objects."""
 
 
-
 @contexts.register
 class Store(contexts.Context):
   """A store for resources."""
@@ -505,8 +595,9 @@ class Store(contexts.Context):
     self._registry = registry
     self._ref_type = ref_type
 
-  def register_type(self, resource: Union[Type[R], R]):
-    """Explicitly register a type with the store."""
+  def _register_type_helper(self, resource: Union[Type[R], R]) -> (
+    Tuple[types.TypeKey, Dict[str, Optional[types.TypeDescriptor]]]):
+    """Helper for register type sync / async implementation."""
     as_resource: Union[Type[interfaces.ResourceBase], interfaces.ResourceBase]
     if isinstance(resource, type):
       as_resource = resource_registry.wrap_type(resource)
@@ -514,7 +605,17 @@ class Store(contexts.Context):
       as_resource = resource_registry.wrap(resource)
     attributes = dict(
       zip(as_resource.field_names(), as_resource.field_descriptors()))
-    self._backend.register_type(as_resource.type_key(), attributes)
+    return as_resource.type_key(), attributes
+
+  def register_type(self, resource: Union[Type[R], R]):
+    """Explicitly register a type with the store."""
+    type_key, attributes = self._register_type_helper(resource)
+    self._backend.register_type(type_key, attributes)
+
+  async def register_type_async(self, resource: Union[Type[R], R]):
+    """Explicitly register a type with the store."""
+    type_key, attributes = self._register_type_helper(resource)
+    await self._backend.register_type_async(type_key, attributes)
 
   def commit(self, resource: R) -> Ref[R]:
     """Commits a resource to the store."""
@@ -524,13 +625,25 @@ class Store(contexts.Context):
     self._backend.commit(ref.id, packed_resource)
     return ref
 
+  async def commit_async(self, resource: R) -> Ref[R]:
+    """Commits a resource to the store."""
+    as_resource = resource_registry.wrap(resource)
+    await self.register_type_async(as_resource)
+    ref, packed_resource = self._ref_type.pack(as_resource)
+    await self._backend.commit_async(ref.id, packed_resource)
+    return ref
+
   def has(self, ref: Ref) -> bool:
     """Returns whether the store has a resource."""
     return self._backend.has((ref.id,))[0]
 
-  def checkout(self, ref: Ref[R]) -> R:
-    """Retrieves a resource from the store."""
-    packed_resource = self._backend.checkout((ref.id,))[0]
+  async def has_async(self, ref: Ref) -> bool:
+    """Returns whether the store has a resource."""
+    return (await self._backend.has_async((ref.id,)))[0]
+
+  def _checkout_verify_packed(
+    self, ref: Ref[R], packed_resource: Optional[PackedResource]) -> R:
+    """Verify and return the packed object.."""
     if packed_resource is None:
       raise NotFound(ref.id)
     if packed_resource.ref() != ref:
@@ -539,35 +652,64 @@ class Store(contexts.Context):
         f'expected: {ref}')
     return ref.unpack(packed_resource)
 
-  def get_transitive_type_requirements(self, ref: Ref) -> (
-      Set[types.TypeKey]):
-    """Return a set of transitive type requirements for the reference."""
-    graph = self._backend.get_dependency_graph([ref.id])
+  def checkout(self, ref: Ref[R]) -> R:
+    """Retrieves a resource from the store."""
+    packed_resource = self._backend.checkout((ref.id,))[0]
+    return self._checkout_verify_packed(ref, packed_resource)
+
+  async def checkout_async(self, ref: Ref[R]) -> R:
+    """Retrieves a resource from the store."""
+    packed_resource = (await self._backend.checkout_async((ref.id,)))[0]
+    return self._checkout_verify_packed(ref, packed_resource)
+
+  def _get_transitive_ref_ids(
+    self, ref: Ref, graph: Dict[str, Optional[Set[str]]]) -> (
+      Set[str]):
+    """Return a set of transitive ref IDs from a dependency graph."""
     all_references = {ref.id}
     for ref_id, deps in graph.items():
       if deps is None:
         raise NotFound(f'Could not resolve transitive reference {ref_id}.')
       all_references.update(deps)
-    type_sets = self._backend.get_type_keys(all_references)
+    return all_references
+
+  def _get_transitive_type_requirements(
+    self,
+    ref_and_typesets: Iterable[Tuple[str, Optional[Set[types.TypeKey]]]]) -> (
+      Set[types.TypeKey]):
+    """Return the set of type keys.."""
     result: Set[types.TypeKey] = set()
-    for typed_ref, type_set in zip(all_references, type_sets):
+    for typed_ref, type_set in ref_and_typesets:
       if type_set is None:
         raise TypeKeyError(
           f'Could not resolve types for transitive reference {typed_ref}.')
       result.update(type_set)
     return result
 
-  def get_distribution_requirements(
-        self, ref: Ref, expect_distribution_key: bool=True) -> (
-      Set[types.DistributionKey]):
-    """Return the distribution requirements of a reference.
+  def get_transitive_type_requirements(self, ref: Ref) -> (
+      Set[types.TypeKey]):
+    """Return a set of transitive type requirements for the reference."""
+    all_references = self._get_transitive_ref_ids(
+      ref, self._backend.get_dependency_graph([ref.id]))
+    type_sets = self._backend.get_type_keys(all_references)
+    return self._get_transitive_type_requirements(
+      zip(all_references, type_sets))
 
-    Args:
-      ref: The reference to check.
-      expect_distribution_key: If True, raise an error if the reference does
-        not have a distribution key.
-    """
-    type_requirements = self.get_transitive_type_requirements(ref)
+  async def get_transitive_type_requirements_async(self, ref: Ref) -> (
+      Set[types.TypeKey]):
+    """Return a set of transitive type requirements for the reference."""
+    all_references = self._get_transitive_ref_ids(
+      ref, await self._backend.get_dependency_graph_async([ref.id]))
+    type_sets = await self._backend.get_type_keys_async(all_references)
+    return self._get_transitive_type_requirements(
+      zip(all_references, type_sets))
+
+  def _get_distribution_requirements(
+      self,
+      type_requirements: Set[types.TypeKey],
+      expect_distribution_key: bool) -> (
+        Set[types.DistributionKey]):
+    """Return distribution requirements from a set of type keys."""
     result: Set[types.DistributionKey] = set()
     for type_info in type_requirements:
       if type_info.distribution_key is None:
@@ -578,17 +720,57 @@ class Store(contexts.Context):
         result.add(type_info.distribution_key)
     return result
 
+  def get_distribution_requirements(
+    self, ref: Ref, expect_distribution_key: bool=True) -> (
+      Set[types.DistributionKey]):
+    """Return the distribution requirements of a reference.
+
+    Args:
+      ref: The reference to check.
+      expect_distribution_key: If True, raise an error if the reference does
+        not have a distribution key.
+    """
+    return self._get_distribution_requirements(
+      self.get_transitive_type_requirements(ref), expect_distribution_key)
+
+  async def get_distribution_requirements_async(
+    self, ref: Ref, expect_distribution_key: bool=True) -> (
+      Set[types.DistributionKey]):
+    """Return the distribution requirements of a reference.
+
+    Args:
+      ref: The reference to check.
+      expect_distribution_key: If True, raise an error if the reference does
+        not have a distribution key.
+    """
+    return self._get_distribution_requirements(
+      await self.get_transitive_type_requirements_async(ref),
+      expect_distribution_key)
+
+  def _get_dependency_graph(self, graph: Dict[str, Optional[Set[str]]]) -> (
+      Dict[Ref, Optional[Set[Ref]]]):
+    """Translate a backend dependency graph to a reference dependency graph."""
+    return {
+      Ref.from_id(ref):
+        {Ref.from_id(dep) for dep in deps} if deps is not None else None
+      for ref, deps in graph.items()}
+
   def get_dependency_graph(
       self,
       refs: Iterable[Ref],
       max_depth: Optional[int]=None) -> Dict[Ref, Optional[Set[Ref]]]:
     """Return a dependency graph over references."""
-    graph = self._backend.get_dependency_graph(
-      [ref.id for ref in refs], max_depth)
-    return {
-      Ref.from_id(ref):
-        {Ref.from_id(dep) for dep in deps} if deps is not None else None
-      for ref, deps in graph.items()}
+    return self._get_dependency_graph(
+      self._backend.get_dependency_graph([ref.id for ref in refs], max_depth))
+
+  async def get_dependency_graph_async(
+      self,
+      refs: Iterable[Ref],
+      max_depth: Optional[int]=None) -> Dict[Ref, Optional[Set[Ref]]]:
+    """Return a dependency graph over references."""
+    return self._get_dependency_graph(
+      await self._backend.get_dependency_graph_async(
+        [ref.id for ref in refs], max_depth))
 
 
 @contexts.register_to_superclass(Store)
