@@ -16,7 +16,7 @@
 
 import dataclasses
 import tempfile
-from typing import List
+from typing import Awaitable, Callable, List, TypeVar
 import unittest
 
 import enact
@@ -120,18 +120,34 @@ class RefTest(unittest.TestCase):
     packed.ref().verify(packed.data)
     self.assertEqual(packed.ref().unpack(packed), 1)
 
+T = TypeVar('T')
 
-class StoreTest(unittest.TestCase):
-  """A test for stores."""
+class StoreTest(unittest.IsolatedAsyncioTestCase):
 
-  def test_commit_has_get(self):
-    """Create a store and test that commit, has, and get work."""
-    store = enact.Store()
-    resource = SimpleResource(x=1, y=2.0)
-    ref = store.commit(resource)
-    self.assertTrue(store.has(ref))
-    self.assertEqual(store.checkout(ref), resource)
-    self.assertNotEqual(id(store.checkout(ref)), id(resource))
+  def setUp(self):
+    """Initializes the test."""
+    self._async = False
+
+  def _as_async(self, fun: Callable[..., T]) -> (
+      Callable[..., Awaitable[T]]):
+    """Returns either the sync or corresponding async function."""
+    assert getattr(fun, '__self__'), 'Callable must be a bound instance method.'
+    if not self._async:
+      async def wrapper(*args, **kwargs):
+        return fun(*args, **kwargs)
+      return wrapper
+    return getattr(fun.__self__, fun.__name__ + '_async')
+
+  async def test_commit_has_get(self):
+    """Create a store and test that commit, has, and cehckout work."""
+    for async_ in (False, True):
+      self._async = async_
+      store = enact.Store()
+      resource = SimpleResource(x=1, y=2.0)
+      ref = await self._as_async(store.commit)(resource)
+      self.assertEqual(await self._as_async(store.checkout)(ref), resource)
+      self.assertNotEqual(id(await self._as_async(store.checkout)(ref)),
+                          id(resource))
 
   def test_store_provided_backend(self):
     """Tests that constructing stores with a provided backend works."""
@@ -156,39 +172,39 @@ class StoreTest(unittest.TestCase):
     self.assertEqual(store.checkout(ref), resource)
     self.assertNotEqual(id(store.checkout(ref)), id(resource))
 
-  def test_wrapped_ref(self):
+  async def test_wrapped_ref(self):
     store = enact.Store()
     for val in [None, 0, 0.0, 'str', True, bytes([1, 2, 3]),
                 [1, 2, 3], {'a': 1}]:
       with self.subTest(val):
-        ref = store.commit(val)
-        self.assertEqual(store.checkout(ref), val)
+        ref = await self._as_async(store.commit)(val)
+        self.assertEqual(await self._as_async(store.checkout)(ref), val)
 
-  def test_caching_none(self):
+  async def test_caching_none(self):
     """Tests that caching None works correctly."""
     store = enact.Store()
-    ref = store.commit(None)
+    ref = await self._as_async(store.commit)(None)
     self.assertTrue(ref.is_cached())
     self.assertIsNone(ref.checkout())
 
-  def test_caching(self):
+  async def test_caching(self):
     """Test that caching works correctly."""
     store = enact.Store()
     resource = SimpleResource(x=1, y=2.0)
-    ref = store.commit(resource)
+    ref = await self._as_async(store.commit)(resource)
 
     # checkout() works because cached reference is correct.
     self.assertTrue(ref.is_cached())
-    ref.checkout().x = 10
+    (await self._as_async(ref.checkout)()).x = 10
     self.assertFalse(ref.is_cached())
 
     # checkout() fails because cached reference is incorrect.
     with self.assertRaises(contexts.NoActiveContext):
-      ref.checkout()
+      await self._as_async(ref.checkout())()
 
     with store:
       # Refetches the correct resource from the store.
-      self.assertEqual(ref.checkout().x, 1)
+      self.assertEqual((await self._as_async(ref.checkout)()).x, 1)
 
   def test_modify(self):
     """Tests the modify context."""
@@ -234,14 +250,16 @@ class StoreTest(unittest.TestCase):
       want = {x.id, y.id}
       self.assertEqual(got, want)
 
-  def test_file_backend(self):
+  async def test_file_backend(self):
     """Tests the file backend."""
     with tempfile.TemporaryDirectory() as tmpdir:
-      store = enact.Store(backend=enact.FileBackend(tmpdir))
-      resource = SimpleResource(x=1, y=2.0)
-      ref = store.commit(resource)
-      self.assertTrue(store.has(ref))
-      self.assertEqual(store.checkout(ref), resource)
+      for async_ in (False, True):
+        self._async = async_
+        store = enact.Store(backend=enact.FileBackend(tmpdir))
+        resource = SimpleResource(x=1, y=2.0)
+        ref = await self._as_async(store.commit)(resource)
+        self.assertTrue(await self._as_async(store.has)(ref))
+        self.assertEqual(await self._as_async(store.checkout)(ref), resource)
 
   def test_commit_cyclic_fails(self):
     """Tests that commits with cylic resource graphs fail."""
@@ -261,7 +279,7 @@ class StoreTest(unittest.TestCase):
       enact.Ref.type_key().distribution_key,
       types.TypeKey(version.DIST_NAME, version.__version__))
 
-  def test_backend_get_types(self):
+  async def test_backend_get_types(self):
     """Tests that getting types work."""
     backend = enact.InMemoryBackend()
     with enact.Store(backend):
@@ -274,24 +292,27 @@ class StoreTest(unittest.TestCase):
       r2 = enact.commit([(1,2)])  # tuple in list
       r3 = enact.Ref.from_id('{"digest": "fake_id"}')
       # pylint: disable=unbalanced-tuple-unpacking
-      t1, t2, t3 = backend.get_type_keys((r1.id, r2.id, r3.id))
-      self.assertIsNone(t3)
+      for async_ in (False, True):
+        self._async = async_
+        t1, t2, t3 = await self._as_async(
+          backend.get_type_keys)((r1.id, r2.id, r3.id))
+        self.assertIsNone(t3)
 
-      expected_t1 = {
-        enact.Ref.type_key(),
-        SimpleResource.type_key(),
-        type_wrappers.SetWrapper.type_key(),
-      }
-      self.assertEqual(t1, expected_t1)
+        expected_t1 = {
+          enact.Ref.type_key(),
+          SimpleResource.type_key(),
+          type_wrappers.SetWrapper.type_key(),
+        }
+        self.assertEqual(t1, expected_t1)
 
-      expected_t2 = {
-        enact.Ref.type_key(),
-        resource_registry.ListWrapper.type_key(),
-        type_wrappers.TupleWrapper.type_key()
-      }
-      self.assertEqual(t2, expected_t2)
+        expected_t2 = {
+          enact.Ref.type_key(),
+          resource_registry.ListWrapper.type_key(),
+          type_wrappers.TupleWrapper.type_key()
+        }
+        self.assertEqual(t2, expected_t2)
 
-  def test_backend_get_dependency_graph(self):
+  async def test_backend_get_dependency_graph(self):
     """Tests that getting dependency graphs works."""
     with tempfile.TemporaryDirectory() as tmp_dir:
       for store in (enact.InMemoryStore(), enact.FileStore(tmp_dir)):
@@ -302,16 +323,18 @@ class StoreTest(unittest.TestCase):
           r4 = enact.commit([r2, r3, r1])
           fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
 
-          graph = store.get_dependency_graph(
-            (r1, r2, r3, r4, fake_ref))
-          expected_graph = {
-            r4: {r2, r3, r1},
-            r3: {r1},
-            r2: {r1},
-            r1: set(),
-            fake_ref: None}
+          for async_ in (False, True):
+            self._async = async_
+            graph = await self._as_async(store.get_dependency_graph)(
+              (r1, r2, r3, r4, fake_ref))
+            expected_graph = {
+              r4: {r2, r3, r1},
+              r3: {r1},
+              r2: {r1},
+              r1: set(),
+              fake_ref: None}
 
-          self.assertEqual(graph, expected_graph)
+            self.assertEqual(graph, expected_graph)
 
   def test_backend_get_dependency_graph_depth(self):
     """Tests that getting dependency graphs up to a certain depth works."""
@@ -324,7 +347,7 @@ class StoreTest(unittest.TestCase):
       graph = backend.get_dependency_graph((refs[-1].id,), max_depth=10)
       self.assertEqual(set(graph.keys()), {ref.id for ref in refs[-11:]})
 
-  def test_get_transitive_type_requirements(self):
+  async def test_get_transitive_type_requirements(self):
     """Tests that getting transitive type requirements works."""
     with enact.Store() as store:
       r1 = enact.commit(5)
@@ -340,8 +363,11 @@ class StoreTest(unittest.TestCase):
         type_wrappers.SetWrapper.type_key(),
       }
 
-      type_requirements = store.get_transitive_type_requirements(r4)
-      self.assertEqual(type_requirements, expected_type_requirements)
+      for async_ in (False, True):
+        self._async = async_
+        type_requirements = await self._as_async(
+          store.get_transitive_type_requirements)(r4)
+        self.assertEqual(type_requirements, expected_type_requirements)
 
   def test_get_transitive_type_requirements_fails(self):
     """Tests that the transitive type fails if a reference is not present."""
@@ -351,7 +377,7 @@ class StoreTest(unittest.TestCase):
       with self.assertRaises(references.NotFound):
         store.get_transitive_type_requirements(r)
 
-  def test_get_distribution_requirements(self):
+  async def test_get_distribution_requirements(self):
     """Tests that getting distribution requirements works."""
     with enact.Store() as store:
       r1 = enact.commit(5)
@@ -367,25 +393,31 @@ class StoreTest(unittest.TestCase):
         types.DistributionKey(version.DIST_NAME, version.__version__),
       }
 
-      dist_requirements = store.get_distribution_requirements(
-        r4, expect_distribution_key=False)
+      for async_ in (False, True):
+        self._async = async_
+        dist_requirements = await self._as_async(
+            store.get_distribution_requirements)(
+          r4, expect_distribution_key=False)
 
-      self.assertEqual(dist_requirements, expected_dist_requirements)
+        self.assertEqual(dist_requirements, expected_dist_requirements)
 
-  def test_type_registration(self):
+  async def test_type_registration(self):
     with tempfile.TemporaryDirectory() as tmp_dir:
       backends: List[references.StorageBackend] = [
         enact.FileBackend(tmp_dir), enact.InMemoryBackend()]
 
       for backend in backends:
-        with self.subTest(backend=type(backend).__name__):
-          with enact.Store(backend):
-            _ = enact.commit(SimpleResource(1, 2.0))
-            attributes = backend.get_type(SimpleResource.type_key())
-            self.assertEqual(
-              attributes,
-              {
-                'x': types.Int(),
-                'y': types.Float()
-              }
-            )
+        for async_ in (False, True):
+          with self.subTest(backend=type(backend).__name__, async_=async_):
+            self._async = async_
+            with enact.Store(backend) as store:
+              _ = await self._as_async(store.commit)(SimpleResource(1, 2.0))
+              attributes = await self._as_async(backend.get_type)(
+                SimpleResource.type_key())
+              self.assertEqual(
+                attributes,
+                {
+                  'x': types.Int(),
+                  'y': types.Float()
+                }
+              )
