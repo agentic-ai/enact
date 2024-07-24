@@ -88,20 +88,20 @@ class Ref(Generic[R], interfaces.ResourceBase):
   end-to-end encryption or compression.
   """
 
-  def __init__(self, digest: str, value: Optional[R]=None):
+  def __init__(self, digest: str):
     """Initializes the reference from a digest and optionally the resource."""
     assert isinstance(digest, str), (
       'Must instantiate Ref with a string digest.')
     self._digest = digest
-    self._cached: Optional[R] = value
+    self._cached: List[R] = []
 
   def _clear_cache(self):
     """Clear the cache."""
-    self._cached = None
+    self._cached = []
 
   def _set_cache(self, value: R):
     """Set the cache."""
-    self._cached = resource_registry.unwrap(value)
+    self._cached = [resource_registry.unwrap(value)]
 
   @property
   def digest(self) -> str:
@@ -134,6 +134,12 @@ class Ref(Generic[R], interfaces.ResourceBase):
     commit(resource)
     self.set(resource)
 
+  def is_cached(self) -> bool:
+    """Check whether the reference is cached."""
+    return (
+      bool(self._cached) and
+      self.from_resource(resource_registry.wrap(self._cached[0])) == self)
+
   def checkout(self) -> R:
     """Fetches the resource from the cache or active store."""
     if (self._cached is None or
@@ -153,9 +159,9 @@ class Ref(Generic[R], interfaces.ResourceBase):
   @classmethod
   def from_resource(cls: Type[RefT], resource: interfaces.ResourceBase) -> RefT:
     """Constructs a reference to the resource."""
-    return cls(
-      digest=digests.digest(resource),
-      value=resource_registry.unwrap(resource))
+    ref = cls(digest=digests.digest(resource))
+    ref._set_cache(resource_registry.unwrap(resource))
+    return ref
 
   @classmethod
   def from_resource_dict(
@@ -230,7 +236,7 @@ class Ref(Generic[R], interfaces.ResourceBase):
     if type(other) != type(self):  # pylint: disable=unidiomatic-typecheck
       raise ValueError(f'Cannot set {self} from {other}: types do not match.')
     self._digest = other._digest  # pylint: disable=protected-access
-    self._cached = other._cached  # pylint: disable=protected-access
+    self._cached = list(other._cached)  # pylint: disable=protected-access
 
 
 class StorageBackend(abc.ABC):
