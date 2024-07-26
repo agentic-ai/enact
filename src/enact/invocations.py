@@ -838,6 +838,9 @@ class AsyncInvokableBase(_InvokableBase[I_contra, O_co]):
       commit: bool=True) -> Invocation[I_contra, O_co]:
     """Invoke the invokable, tracking invocation metadata.
 
+    TODO: AsyncInvokables are currently using the synchronous store interface
+    during invocations: https://github.com/agentic-ai/enact/issues/116
+
     Args:
       arg: The input resource.
       replay_from: An optional invocation to replay form.
