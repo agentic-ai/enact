@@ -944,11 +944,11 @@
         },
         "openai": {
             "hashes": [
-                "sha256:a903245c0ecf622f2830024acdaa78683c70abb8e9d37a497b851670864c9f73",
-                "sha256:dc8197fc40ab9d431777b6620d962cc49f4544ffc3011f03ce0a805e6eb54adb"
+                "sha256:9a6adda0d6ae8fce02d235c5671c399cfa40d6a281b3628914c7ebf244888ee3",
+                "sha256:faf87206785a6b5d9e34555d6a3242482a6852bc802e453e2a891f68ee04ce55"
             ],
             "index": "pypi",
-            "version": "==1.37.0"
+            "version": "==1.37.1"
         },
         "overrides": {
             "hashes": [
@@ -1409,11 +1409,11 @@
         },
         "replicate": {
             "hashes": [
-                "sha256:453b5c3564526190cc9766a98684d0526e08d0042f1cc4f653509bc016999dac",
-                "sha256:b93859d20802c05928d766702d4863247e156458ced54e384a25f839f9ac4119"
+                "sha256:0f5ce1ad1867c8c51ca58bf68163775c4c4b28829860bee4f28fc0abe079dcbe",
+                "sha256:fab7535555aac5b0a9bad035cf5aaeb5b2071edb7f19d336441a5a4fe5c17d36"
             ],
             "index": "pypi",
-            "version": "==0.29.0"
+            "version": "==0.30.1"
         },
         "requests": {
             "hashes": [
