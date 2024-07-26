@@ -132,7 +132,8 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
   def _as_async(self, fun: Callable[..., T]) -> (
       Callable[..., Awaitable[T]]):
     """Returns either the sync or corresponding async function."""
-    assert getattr(fun, '__self__'), 'Callable must be a bound instance method.'
+    assert getattr(fun, '__self__') is not None, (
+      'Callable must be a bound instance method.')
     if not self._async:
       async def wrapper(*args, **kwargs):
         return fun(*args, **kwargs)

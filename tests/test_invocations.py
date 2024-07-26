@@ -232,6 +232,7 @@ class InvocationsTest(unittest.TestCase):
 
   def test_meta_invoke(self):
     """Tests that meta-invocations are tracked correctly."""
+    @enact.register
     @dataclasses.dataclass
     class MetaInvoke(enact.Invokable):
       invokable: enact.InvokableBase
@@ -250,6 +251,7 @@ class InvocationsTest(unittest.TestCase):
 
   def test_wrapped_resource(self):
     """Tests that exceptions are tracked as wrapped when enabled."""
+    @enact.register
     class PythonErrorOnInvoke(enact.Invokable):
       def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
@@ -264,11 +266,13 @@ class InvocationsTest(unittest.TestCase):
 
   def test_raise_native_error(self):
     """Tests that exceptions are raised in native format."""
+    @enact.register
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, unused_input: enact.ResourceBase):
+      def call(self, unused_input: int):
         raise ValueErrorResource('foo')
+    @enact.register
     class ExpectValueError(enact.Invokable):
-      def call(self, unused_input: enact.ResourceBase):
+      def call(self, unused_input: int):
         try:
           PythonErrorOnInvoke()(3)
         except ValueErrorResource:
@@ -284,14 +288,16 @@ class InvocationsTest(unittest.TestCase):
 
   def test_raised_here(self):
     """Tests that the raised_here field is set correctly."""
+    @enact.register
     class PythonErrorOnInvoke(enact.Invokable):
-      def call(self, unused_input: enact.ResourceBase):
+      def call(self, unused_input: int):
         raise ValueErrorResource('foo')
 
+    @enact.register
     @dataclasses.dataclass
     class SubCall(enact.Invokable):
       invokable: enact.Ref[enact.InvokableBase]
-      def call(self, input_resource: enact.ResourceBase):
+      def call(self, input_resource: int):
         self.invokable.checkout()(input_resource)
 
     with self.store as store:
@@ -521,6 +527,7 @@ class InvocationsTest(unittest.TestCase):
 
   def test_request_input_fun(self):
     """Tests the request_input function."""
+    @enact.register
     class MyInvokable(enact.Invokable):
       def call(self, value: int):
         return enact.request_input(int) + value
@@ -722,6 +729,7 @@ class AsyncInvocationsTest(unittest.TestCase):
 
   def test_wrapped_resource_async(self):
     """Tests that exceptions are tracked as wrapped when enabled."""
+    @enact.register
     class PythonErrorOnInvoke(enact.AsyncInvokable):
       async def call(self, unused_input: enact.ResourceBase):
         raise ValueError('foo')
