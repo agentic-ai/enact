@@ -17,7 +17,7 @@
 import abc
 import functools
 from typing import (
-  Dict, Generic, Iterable, List, Optional, Tuple, Type, TypeVar,
+  Callable, Dict, Generic, Iterable, List, Optional, Tuple, Type, TypeVar,
   Union)
 
 from enact import acyclic
@@ -127,34 +127,65 @@ class ResourceBase:
     raise NotImplementedError()
 
   @staticmethod
-  def _to_dict_value(value: FieldValue) -> ResourceDictValue:
-    """Transforms a field value to a resource dict value."""
+  def _to_dict_value(
+      value: FieldValue,
+      field_value_callback: Optional[Callable[[FieldValue], None]]=None) -> (
+        ResourceDictValue):
+    """Transforms a field value to a resource dict value.
+
+    Args:
+      value: The field value to translate to a ResourceDictValue.
+      field_value_callback: Optional callback to apply to each field value.
+    """
     with acyclic.AcyclicContext(value):
+      result: ResourceDictValue
       if isinstance(value, ResourceBase):
-        return value.to_resource_dict()
-      if isinstance(value, types.PRIMITIVES):
-        return value
-      if isinstance(value, type) and issubclass(value, ResourceBase):
-        return value
-      if isinstance(value, List):
-        return [ResourceBase._to_dict_value(x) for x in value]
-      if isinstance(value, Dict):
+        result = value.to_resource_dict(
+          field_value_callback=field_value_callback,
+          include_root=True)
+      elif isinstance(value, types.PRIMITIVES):
+        result = value
+      elif isinstance(value, type) and issubclass(value, ResourceBase):
+        result = value
+      elif isinstance(value, List):
+        result = [ResourceBase._to_dict_value(x, field_value_callback)
+                  for x in value]
+      elif isinstance(value, Dict):
         def _assert_str(maybe_str: str) -> str:
           if type(maybe_str) is not str:  # pylint: disable=unidiomatic-typecheck
             raise FieldTypeError(
               f'Expected string key, got {type(maybe_str)}')
           return maybe_str
-        return {
-          _assert_str(k): ResourceBase._to_dict_value(v)
+        result = {
+          _assert_str(k): ResourceBase._to_dict_value(v, field_value_callback)
           for k, v in value.items()}
-      raise FieldTypeError(
-        f'Encountered unsupported field type {type(value)}: {value}')
+      else:
+        raise FieldTypeError(
+          f'Encountered unsupported field type {type(value)}: {value}')
+      if field_value_callback is not None:
+        field_value_callback(value)
+      return result
 
-  def to_resource_dict(self: C) -> 'ResourceDict[C]':
-    """Returns a ResourceDict dictionary representation."""
+  def to_resource_dict(
+      self: C,
+      field_value_callback: Optional[Callable[[FieldValue], None]]=None,
+      include_root: bool=True) -> (
+        'ResourceDict[C]'):
+    """Returns a ResourceDict dictionary representation.
+
+    Args:
+      field_value_callback: Optional callback to apply to each field value.
+      include_root: Whether to apply the callback to self.
+
+    Returns:
+      The resource as a ResourceDict.
+    """
+    if field_value_callback is not None and include_root:
+      field_value_callback(self)
     result = ResourceDict(type(self))
     for field_name, value in self.field_items():
-      result[field_name] = ResourceBase._to_dict_value(value)
+      result[field_name] = ResourceBase._to_dict_value(
+        value, field_value_callback)
     return result
 
   def set_from(self, other: 'ResourceBase'):
