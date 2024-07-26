@@ -53,6 +53,8 @@ class PackedResource(NamedTuple):
   ref_dict: interfaces.ResourceDict
   # The outgoing reference ids as a set of strings.
   links: Set[str]
+  # The referenced type keys.
+  type_keys: Set[types.TypeKey]
 
   def unpack(self) -> Any:
     """Unpacks the resource."""
@@ -84,6 +86,23 @@ def commit(resource: R) -> 'Ref[R]':
 async def commit_async(resource: R) -> 'Ref[R]':
   """Commits a value to the store and returns a reference."""
   return await Store.current().commit_async(resource)
+
+
+class _PackHelper:
+  """Collects references and type keys while walking a resource."""
+
+  def __init__(self):
+    self.links: Set[str] = set()
+    self.type_keys: Set[types.TypeKey] = set()
+
+  def __call__(self, value: interfaces.FieldValue):
+    """Collects references and type keys."""
+    if isinstance(value, Ref):
+      self.links.add(value.id)
+    elif isinstance(value, interfaces.ResourceBase):
+      self.type_keys.add(value.type_key())
+    elif isinstance(value, type) and issubclass(value, interfaces.ResourceBase):
+      self.type_keys.add(value.type_key())
 
 
 @resource_registry.register
@@ -214,19 +233,14 @@ class Ref(Generic[R], interfaces.ResourceBase):
   @classmethod
   def pack(cls: Type[RefT], resource: ResourceT) -> Tuple[RefT, PackedResource]:
     """Wraps and packs the resource."""
-    # TODO: This should be improved since it walks the resource twice:
-    #   1. Once for walk_resource
-    #   2. Once for to_resource_dict.
-    # This will involve wrapping values twice when type_wrappers are involved.
-    # Maybe add a visitor interface to 'to_resource_dict' function, instead of
-    # using walk_resource.
-    links = {
-      l.id for l in utils.walk_resource(resource) if isinstance(l, Ref)}
+    callback = _PackHelper()
+    resource_dict = resource.to_resource_dict(callback)
     ref = cls.from_resource(resource)
     return ref, PackedResource(
-      resource.to_resource_dict(),
+      data=resource_dict,
       ref_dict=ref.to_resource_dict(),
-      links=links)
+      links=callback.links,
+      type_keys=callback.type_keys)
 
   @classmethod
   def field_names(cls) -> Iterable[str]:
@@ -549,7 +563,8 @@ class FileBackend(StorageBackend):
     ref_bytes = self._serializer.serialize(packed_resource.ref_dict)
     links = packed_resource.links
     with open(self._get_path(ref_id), 'wb') as file:
-      pickle.dump((data_bytes, ref_bytes, links), file)
+      pickle.dump((data_bytes, ref_bytes,
+                   links, packed_resource.type_keys), file)
 
   def has(self, ref_ids: Iterable[str]) -> List[bool]:
     """Returns whether the backend has the referenced resource."""
@@ -566,10 +581,10 @@ class FileBackend(StorageBackend):
     if not os.path.exists(path):
       return None
     with open(path, 'rb') as file:
-      data_bytes, ref_bytes, links = pickle.load(file)
+      data_bytes, ref_bytes, links, type_keys = pickle.load(file)
     data: interfaces.ResourceDict = self._serializer.deserialize(data_bytes)
     ref_dict: interfaces.ResourceDict = self._serializer.deserialize(ref_bytes)
-    return PackedResource(data, ref_dict, links)
+    return PackedResource(data, ref_dict, links, type_keys)
 
 
 class DistributionKeyError(Exception):
