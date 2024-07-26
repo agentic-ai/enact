@@ -74,7 +74,7 @@ class DistributionKey(typing.NamedTuple):
     return DistributionKey(**typing.cast(typing.Dict[str, str], d))
 
 
-@dataclasses.dataclass  # Type descriptors are dataclasses for value-semantics.
+@dataclasses.dataclass(frozen=True)
 class TypeDescriptor(abc.ABC):
   """Interface for type descriptors."""
   NAME: typing.ClassVar[str] = ''
@@ -101,6 +101,21 @@ class TypeDescriptor(abc.ABC):
           f'Expected a dictionary for resource type descriptor: '
           f'{json_value}')
       return ResourceType(TypeKey.from_dict(value))
+    elif List.NAME in json_value:
+      value = json_value[List.NAME]
+      if value is None:
+        return List(None)
+      return List(TypeDescriptor.from_json(value))
+    elif Dict.NAME in json_value:
+      value = json_value[Dict.NAME]
+      if value is None:
+        return Dict(None)
+      return Dict(TypeDescriptor.from_json(value))
+    elif Union.NAME in json_value:
+      values = json_value[Union.NAME]
+      assert isinstance(values, list)
+      return Union(
+        tuple(TypeDescriptor.from_json(value) for value in values))
     raise ValueError(f'Unknown type descriptor: {json_value}')
 
   def pformat(self) -> str:
@@ -108,55 +123,98 @@ class TypeDescriptor(abc.ABC):
     return self.NAME
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Int(TypeDescriptor):
   """Describes an int value."""
   NAME: typing.ClassVar[str] = 'int'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Float(TypeDescriptor):
   """Describes a float value."""
   NAME: typing.ClassVar[str] = 'float'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Str(TypeDescriptor):
   """Describes a string value."""
   NAME: typing.ClassVar[str] = 'str'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Bool(TypeDescriptor):
   """Describes a boolean value."""
   NAME: typing.ClassVar[str] = 'bool'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Bytes(TypeDescriptor):
   """Describes a bytes value."""
   NAME: typing.ClassVar[str] = 'bytes'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class List(TypeDescriptor):
   """Describes a list value."""
   NAME: typing.ClassVar[str] = 'list'
+  value_type: typing.Optional[TypeDescriptor] = None
+
+  def to_json(self) -> Json:
+    """JSON representation."""
+    if self.value_type is None:
+      return self.NAME
+    return {self.NAME: self.value_type.to_json()}
+
+  def pformat(self) -> str:
+    """Pretty formats the descriptor."""
+    if self.value_type is not None:
+      return f'{self.NAME}[{self.value_type.pformat()}]'
+    return self.NAME
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Dict(TypeDescriptor):
   """Describes a dictionary value."""
   NAME: typing.ClassVar[str] = 'dict'
+  value_type: typing.Optional[TypeDescriptor] = None
+
+  def to_json(self) -> Json:
+    """JSON representation."""
+    if self.value_type is None:
+      return self.NAME
+    return {self.NAME: self.value_type.to_json()}
+
+  def pformat(self) -> str:
+    """Pretty formats the descriptor."""
+    if self.value_type is not None:
+      return f'{self.NAME}[{self.value_type.pformat()}]'
+    return self.NAME
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
+class Union(TypeDescriptor):
+  """Describes an optional value."""
+  NAME: typing.ClassVar[str] = 'optional'
+  value_types: typing.Tuple[TypeDescriptor, ...]
+
+  def to_json(self) -> Json:
+    """JSON representation."""
+    return {self.NAME: [
+      value_type.to_json() for value_type in self.value_types]}
+
+  def pformat(self) -> str:
+    """Pretty formats the descriptor."""
+    value_pformats = [value_type.pformat() for value_type in self.value_types]
+    return f'{self.NAME}[{", ".join(value_pformats)}]'
+
+
+@dataclasses.dataclass(frozen=True)
 class NoneType(TypeDescriptor):
   """Describes a None type."""
   NAME: typing.ClassVar[str] = 'none'
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ResourceType(TypeDescriptor):
   """Describes a resource type."""
   NAME: typing.ClassVar[str] = 'resource'
