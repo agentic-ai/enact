@@ -13,39 +13,101 @@
 # limitations under the License.
 """Automatic field type inference."""
 
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict, Tuple, Union, TypeVar, cast
 
-from enact import interfaces, types, resource_registry
+from enact import interfaces
+from enact import types
+from enact import resource_registry
 
+class TypeInferenceFailed(Exception):
+  """Raised when type inference fails."""
+  pass
 
-def from_annotation(t: Any) -> Optional[types.TypeDescriptor]:
-  """Attempts to infer a type descriptor from a python type annotation."""
+def from_annotation(t: Any, strict: bool = False) -> (
+    Optional[types.TypeDescriptor]):
+  """Attempts to infer a type descriptor from a python type annotation.
+
+  Args:
+    t: A type annotation.
+    strict: If True, raise an exception if the type cannot be inferred.
+
+  Returns:
+    A type descriptor or None if the type cannot be inferred.
+  Raises:
+    TypeInferenceFailed: If strict is True and the type cannot be inferred.
+  """
+  result: Optional[types.TypeDescriptor] = None
+  failure_reason: str = ''
   if t == int:
-    return types.Int()
-  if t == str:
-    return types.Str()
-  if t == float:
-    return types.Float()
-  if t == bool:
-    return types.Bool()
-  if t == bytes:
-    return types.Bytes()
-  if t == list:
-    return types.List()
-  if t == dict:
-    return types.Dict()
-  if hasattr(t, '__origin__') and t.__origin__ in (types.List, list):
-    return types.List()
-  if hasattr(t, '__origin__') and t.__origin__ in (types.Dict, dict):
-    return types.Dict()
-  if isinstance(t, type):
+    result = types.Int()
+  elif t == str:
+    result = types.Str()
+  elif t == float:
+    result = types.Float()
+  elif t == bool:
+    result = types.Bool()
+  elif t == bytes:
+    result = types.Bytes()
+  elif t == list:
+    result = types.List()
+  elif t == dict:
+    result = types.Dict()
+  elif t == type(None):
+    result = types.NoneType()
+  elif hasattr(t, '__origin__') and t.__origin__ in (List, list):
+    if hasattr(t, '__args__'):
+      if len(t.__args__) != 1:
+        failure_reason = 'List must have exactly one type argument'
+      else:
+        if type(  # pylint: disable=unidiomatic-typecheck
+            t.__args__[0]) is TypeVar:
+          result = types.List()
+          failure_reason = 'Untyped list'
+        else:
+          result = types.List(from_annotation(t.__args__[0], strict=strict))
+    else:
+      result = types.List()
+  elif hasattr(t, '__origin__') and t.__origin__ in (Dict, dict):
+    if hasattr(t, '__args__'):
+      if len(t.__args__) != 2:
+        failure_reason = 'Dict should have exactly two type arguments.'
+      else:
+        arg1, arg2 = t.__args__
+        # pylint: disable=unidiomatic-typecheck
+        if type(arg1) is TypeVar and type(arg2) is TypeVar:
+          # Just 'Dict' will have two type vars as args.
+          result = types.Dict()
+        elif t.__args__[0] != str:
+          failure_reason = (
+            'Only dicts from str are supported at the moment.')
+        else:
+          result = types.Dict(from_annotation(t.__args__[1], strict=strict))
+    else:
+      result = types.Dict()
+  elif hasattr(t, '__origin__') and t.__origin__ == Union:
+    if not hasattr(t, '__args__') or len(t.__args__) == 0:
+      failure_reason = 'Could not parse Union type'
+    else:
+      value_types = tuple(
+        from_annotation(arg, strict=strict) for arg in t.__args__)
+      if any(value_type is None for value_type in value_types):
+        failure_reason = 'Failed to parse value type of Union'
+      else:
+        value_types = cast(Tuple[types.TypeDescriptor, ...], value_types)
+        result = types.Union(value_types)
+  elif t is None:
+    failure_reason = 'Missing type annotation'
+  elif isinstance(t, type):
     try:
       t = resource_registry.wrap_type(t)
     except resource_registry.MissingWrapperError:
-      # We could raise here since this is not allowed, but we'll just ignore it
-      # to not annoy users unless they need enact-based functionality, e.g.,
-      # commits.
-      return None
-    if issubclass(t, interfaces.ResourceBase):
-      return types.ResourceType(t.type_key())
-  return None  # Could not infer type.
+      if strict:
+        failure_reason = 'Unsupported type'
+    if not failure_reason and issubclass(t, interfaces.ResourceBase):
+      result = types.ResourceType(t.type_key())
+  else:
+    failure_reason = 'Unsupported type'
+  if strict and failure_reason:
+    raise TypeInferenceFailed(
+      f'Failed to infer type from annotation. {failure_reason}: {t}')
+  return result

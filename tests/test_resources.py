@@ -244,14 +244,14 @@ class TypeDescriptorTests(unittest.TestCase):
       types.Float(),
       types.Int(),
       types.List(),
-      types.List(),
+      types.List(types.Int()),
       types.Dict(),
-      types.Dict(),
+      types.Dict(types.Int()),
       types.ResourceType(
         TypeExampleResource.type_key()),
-      types.List(),
-      types.Dict(),
-      None,  # Union not supported
-      None,  # Optional not supported
+      types.List(types.ResourceType(TypeExampleResource.type_key())),
+      types.Dict(types.ResourceType(TypeExampleResource.type_key())),
+      types.Union(tuple([types.Int(), types.Float()])),
+      types.Union(tuple([types.Int(), types.NoneType()])),
       types.ResourceType(MyClassWrapper.type_key())
     ])

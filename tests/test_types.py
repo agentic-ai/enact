@@ -25,7 +25,11 @@ class TypesTest(unittest.TestCase):
   def test_from_to_json(self):
     """Tests that the to_json and from_json methods work as expected."""
     for t in (types.Int(), types.Str(), types.Float(), types.Bool(),
-              types.Bytes(), types.List(), types.Dict(), types.NoneType(),
-              types.ResourceType(resource_registry.BoolWrapper.type_key())):
+              types.Bytes(),
+              types.List(None), types.List(types.List(types.Int())),
+              types.Dict(None), types.Dict(types.Dict(types.Str())),
+              types.NoneType(),
+              types.ResourceType(resource_registry.BoolWrapper.type_key()),
+              types.Union(tuple([types.Int(), types.Str(), types.NoneType()]))):
       got = types.TypeDescriptor.from_json(t.to_json())
       self.assertEqual(got, t)
