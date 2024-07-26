@@ -65,6 +65,7 @@ from enact.pretty_print import invocation_summary
 from enact.references import commit
 from enact.references import commit_async
 from enact.references import checkout
+from enact.references import checkout_async
 from enact.references import FileBackend
 from enact.references import InMemoryBackend
 from enact.references import Ref
