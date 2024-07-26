@@ -76,7 +76,7 @@ class RegistryTest(unittest.TestCase):
   def test_lookup_error(self):
     """Tests that lookup raises the correct error."""
     registry = enact.Registry()
-    with self.assertRaises(enact.ResourceNotFound):
+    with self.assertRaises(enact.UnregisteredResource):
       registry.lookup('SimpleResource')
 
   def test_singleton_and_decorator(self):
