@@ -15,6 +15,7 @@
 """References and stores."""
 
 import abc
+import asyncio
 import base64
 import contextlib
 import json
@@ -22,8 +23,8 @@ import os
 import pickle
 
 from typing import (
-  Any, Dict, Generic, Iterable, Iterator, List, Mapping, NamedTuple, Optional,
-  Set, Tuple, Type, TypeVar, Union, cast)
+  Any, Awaitable, Dict, Generic, Iterable, Iterator, List, Mapping, NamedTuple,
+  Optional, Set, Tuple, Type, TypeVar, Union, cast)
 
 from enact import contexts
 from enact import digests
@@ -482,6 +483,8 @@ class InMemoryBackend(StorageBackend):
   def get_type(self, type_key: types.TypeKey) -> (
       Optional[Dict[str, Optional[types.TypeDescriptor]]]):
     """Returns the type, if known."""
+    if type_key not in self._types:
+      return None
     return self._types[type_key]
 
   def commit(self, ref_id: str, packed_resource: PackedResource):
@@ -609,15 +612,17 @@ class Store(contexts.Context):
     self._backend = backend if backend is not None else InMemoryBackend()
     self._registry = registry
     self._ref_type = ref_type
+    # Tracks types known to exist on the backend.
+    self._types_in_backend: Set[types.TypeKey] = set()
 
-  def _register_type_helper(self, resource: Union[Type[R], R]) -> (
+  def _register_type_helper(self, value: Any) -> (
     Tuple[types.TypeKey, Dict[str, Optional[types.TypeDescriptor]]]):
     """Helper for register type sync / async implementation."""
     as_resource: Union[Type[interfaces.ResourceBase], interfaces.ResourceBase]
-    if isinstance(resource, type):
-      as_resource = resource_registry.wrap_type(resource)
+    if isinstance(value, type):
+      as_resource = resource_registry.wrap_type(value)
     else:
-      as_resource = resource_registry.wrap(resource)
+      as_resource = resource_registry.wrap(value)
     attributes = dict(
       zip(as_resource.field_names(), as_resource.field_descriptors()))
     return as_resource.type_key(), attributes
@@ -637,6 +642,13 @@ class Store(contexts.Context):
     as_resource = resource_registry.wrap(resource)
     self.register_type(as_resource)
     ref, packed_resource = self._ref_type.pack(as_resource)
+    new_types = packed_resource.type_keys - self._types_in_backend
+    registry = resource_registry.Registry.get()
+    for type_key in new_types:
+      _, attributes = self._register_type_helper(
+        registry.lookup(type_key))
+      self._backend.register_type(type_key, attributes)
+      self._types_in_backend.add(type_key)
     self._backend.commit(ref.id, packed_resource)
     return ref
 
@@ -645,6 +657,16 @@ class Store(contexts.Context):
     as_resource = resource_registry.wrap(resource)
     await self.register_type_async(as_resource)
     ref, packed_resource = self._ref_type.pack(as_resource)
+    new_types = packed_resource.type_keys - self._types_in_backend
+    register_coros: List[Awaitable] = []
+    registry = resource_registry.Registry.get()
+    for type_key in new_types:
+      _, attributes = self._register_type_helper(
+        registry.lookup(type_key))
+      coro = self._backend.register_type_async(type_key, attributes)
+      register_coros.append(coro)
+    await asyncio.gather(*register_coros)
+    self._types_in_backend.update(new_types)
     await self._backend.commit_async(ref.id, packed_resource)
     return ref
 
@@ -665,7 +687,9 @@ class Store(contexts.Context):
       raise RefError(
         f'Backend returned wrong reference:\ngot {packed_resource.ref()}\n'
         f'expected: {ref}')
-    return ref.unpack(packed_resource)
+    result = ref.unpack(packed_resource)
+    self._types_in_backend.update(packed_resource.type_keys)
+    return result
 
   def checkout(self, ref: Ref[R]) -> R:
     """Retrieves a resource from the store."""
