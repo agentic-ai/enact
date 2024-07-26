@@ -151,6 +151,35 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
       self.assertNotEqual(id(await self._as_async(store.checkout)(ref)),
                           id(resource))
 
+  async def test_commit_stores_types(self):
+    """Tests that types are stored in he backend."""
+    for async_ in (False, True):
+      self._async = async_
+      store = enact.Store()
+      self.assertIsNone(
+        # pylint: disable=protected-access
+        await self._as_async(store._backend.get_type)(
+          SimpleResource.type_key()))
+      @enact.register
+      @dataclasses.dataclass
+      class LocalResource(enact.Resource):
+        z: int
+      with store:
+        enact.commit(SimpleResource(x=[LocalResource(1)], y=0.0))
+
+      # pylint: disable=protected-access
+      simple_type = await self._as_async(store._backend.get_type)(
+          SimpleResource.type_key())
+      assert simple_type is not None
+      self.assertCountEqual(['x', 'y'], simple_type)
+
+      # pylint: disable=protected-access
+      local_type = await self._as_async(store._backend.get_type)(
+        LocalResource.type_key())
+      assert local_type is not None
+      self.assertCountEqual(['z'], local_type)
+
+
   def test_store_provided_backend(self):
     """Tests that constructing stores with a provided backend works."""
     b1 = enact.InMemoryBackend()
