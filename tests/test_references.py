@@ -73,7 +73,8 @@ class JsonPackedRef(enact.Ref):
       JsonPackedResource(serialization.JsonSerializer().serialize(
         resource.to_resource_dict())).to_resource_dict(),
       ref_dict=ref.to_resource_dict(),
-      links={})
+      links=set(),
+      type_keys=set())
 
 
 class RefTest(unittest.TestCase):
