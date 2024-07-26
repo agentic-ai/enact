@@ -38,7 +38,7 @@ class RegistryError(Exception):
   """Raised when there is an error with the registry."""
 
 
-class ResourceNotFound(RegistryError):
+class UnregisteredResource(RegistryError):
   """Raised when a resource is not found."""
 
 
@@ -215,7 +215,9 @@ class Registry:
       type_id = type_id.type_id()
     resource_class = self._type_map.get(type_id)
     if not resource_class:
-      raise ResourceNotFound(f'No type registered for {type_id}')
+      raise UnregisteredResource(
+        f'No type registered for {type_id}.'
+        f'Did you forget to register the type with @enact.register?')
     return resource_class
 
   def _register_function_wrapper(self, wrapper_type: Type[FunctionWrapper]):

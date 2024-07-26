@@ -82,7 +82,7 @@ from enact.registration import register
 
 from enact.resource_registry import Registry
 from enact.resource_registry import RegistryError
-from enact.resource_registry import ResourceNotFound
+from enact.resource_registry import UnregisteredResource
 from enact.resource_registry import wrap
 from enact.resource_registry import unwrap
 from enact.resource_registry import deepcopy
