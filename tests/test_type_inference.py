@@ -75,8 +75,8 @@ class TestTypeInference(unittest.TestCase):
           got,
           type_descriptor)
 
-  def test_type_inference_strict(self):
-    """Test type inference with strict parsing."""
+  def test_type_inference_strict_passes(self):
+    """Test type inference with strict parsing on passing values."""
     test_cases = (
       FULLY_SUPPORTED_TESTCASES)
     for annotation, type_descriptor in test_cases:
@@ -86,6 +86,8 @@ class TestTypeInference(unittest.TestCase):
           got,
           type_descriptor)
 
+  def test_type_inference_strict_fails(self):
+    """Test type inference with strict parsing on failing values."""
     raising_test_cases = (
       PARTIALLY_SUPORTED_TESTCASES +
       UNSUPPORTED_TESTCASES)
