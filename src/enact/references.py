@@ -104,6 +104,8 @@ class _PackHelper:
       self.type_keys.add(value.type_key())
     elif isinstance(value, type) and issubclass(value, interfaces.ResourceBase):
       self.type_keys.add(value.type_key())
+    else:
+      pass  # Ignore other field values.
 
 
 @resource_registry.register
