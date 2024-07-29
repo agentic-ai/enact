@@ -143,41 +143,43 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
   async def test_commit_has_get(self):
     """Create a store and test that commit, has, and cehckout work."""
     for async_ in (False, True):
-      self._async = async_
-      store = enact.Store()
-      resource = SimpleResource(x=1, y=2.0)
-      ref = await self._as_async(store.commit)(resource)
-      self.assertEqual(await self._as_async(store.checkout)(ref), resource)
-      self.assertNotEqual(id(await self._as_async(store.checkout)(ref)),
-                          id(resource))
+      with self.subTest(async_=async_):
+        self._async = async_
+        store = enact.Store()
+        resource = SimpleResource(x=1, y=2.0)
+        ref = await self._as_async(store.commit)(resource)
+        self.assertEqual(await self._as_async(store.checkout)(ref), resource)
+        self.assertNotEqual(id(await self._as_async(store.checkout)(ref)),
+                            id(resource))
 
   async def test_commit_stores_types(self):
-    """Tests that types are stored in he backend."""
+    """Tests that types are stored in the backend."""
     for async_ in (False, True):
-      self._async = async_
-      store = enact.Store()
-      self.assertIsNone(
+      with self.subTest(async_=async_):
+        self._async = async_
+        store = enact.Store()
+        self.assertIsNone(
+          # pylint: disable=protected-access
+          await self._as_async(store._backend.get_type)(
+            SimpleResource.type_key()))
+        @enact.register
+        @dataclasses.dataclass
+        class LocalResource(enact.Resource):
+          z: int
+        with store:
+          enact.commit(SimpleResource(x=[LocalResource(1)], y=0.0))
+
         # pylint: disable=protected-access
-        await self._as_async(store._backend.get_type)(
-          SimpleResource.type_key()))
-      @enact.register
-      @dataclasses.dataclass
-      class LocalResource(enact.Resource):
-        z: int
-      with store:
-        enact.commit(SimpleResource(x=[LocalResource(1)], y=0.0))
+        simple_type = await self._as_async(store._backend.get_type)(
+            SimpleResource.type_key())
+        assert simple_type is not None
+        self.assertCountEqual(['x', 'y'], simple_type)
 
-      # pylint: disable=protected-access
-      simple_type = await self._as_async(store._backend.get_type)(
-          SimpleResource.type_key())
-      assert simple_type is not None
-      self.assertCountEqual(['x', 'y'], simple_type)
-
-      # pylint: disable=protected-access
-      local_type = await self._as_async(store._backend.get_type)(
-        LocalResource.type_key())
-      assert local_type is not None
-      self.assertCountEqual(['z'], local_type)
+        # pylint: disable=protected-access
+        local_type = await self._as_async(store._backend.get_type)(
+          LocalResource.type_key())
+        assert local_type is not None
+        self.assertCountEqual(['z'], local_type)
 
 
   def test_store_provided_backend(self):
@@ -285,12 +287,13 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
     """Tests the file backend."""
     with tempfile.TemporaryDirectory() as tmpdir:
       for async_ in (False, True):
-        self._async = async_
-        store = enact.Store(backend=enact.FileBackend(tmpdir))
-        resource = SimpleResource(x=1, y=2.0)
-        ref = await self._as_async(store.commit)(resource)
-        self.assertTrue(await self._as_async(store.has)(ref))
-        self.assertEqual(await self._as_async(store.checkout)(ref), resource)
+        with self.subTest(async_=async_):
+          self._async = async_
+          store = enact.Store(backend=enact.FileBackend(tmpdir))
+          resource = SimpleResource(x=1, y=2.0)
+          ref = await self._as_async(store.commit)(resource)
+          self.assertTrue(await self._as_async(store.has)(ref))
+          self.assertEqual(await self._as_async(store.checkout)(ref), resource)
 
   def test_commit_cyclic_fails(self):
     """Tests that commits with cylic resource graphs fail."""
@@ -324,24 +327,25 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
       r3 = enact.Ref.from_id('{"digest": "fake_id"}')
       # pylint: disable=unbalanced-tuple-unpacking
       for async_ in (False, True):
-        self._async = async_
-        t1, t2, t3 = await self._as_async(
-          backend.get_type_keys)((r1.id, r2.id, r3.id))
-        self.assertIsNone(t3)
+        with self.subTest(async_=async_):
+          self._async = async_
+          t1, t2, t3 = await self._as_async(
+            backend.get_type_keys)((r1.id, r2.id, r3.id))
+          self.assertIsNone(t3)
 
-        expected_t1 = {
-          enact.Ref.type_key(),
-          SimpleResource.type_key(),
-          type_wrappers.SetWrapper.type_key(),
-        }
-        self.assertEqual(t1, expected_t1)
+          expected_t1 = {
+            enact.Ref.type_key(),
+            SimpleResource.type_key(),
+            type_wrappers.SetWrapper.type_key(),
+          }
+          self.assertEqual(t1, expected_t1)
 
-        expected_t2 = {
-          enact.Ref.type_key(),
-          resource_registry.ListWrapper.type_key(),
-          type_wrappers.TupleWrapper.type_key()
-        }
-        self.assertEqual(t2, expected_t2)
+          expected_t2 = {
+            enact.Ref.type_key(),
+            resource_registry.ListWrapper.type_key(),
+            type_wrappers.TupleWrapper.type_key()
+          }
+          self.assertEqual(t2, expected_t2)
 
   async def test_backend_get_dependency_graph(self):
     """Tests that getting dependency graphs works."""
@@ -355,17 +359,18 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
           fake_ref = enact.Ref.from_id('{"digest": "fake_id"}')
 
           for async_ in (False, True):
-            self._async = async_
-            graph = await self._as_async(store.get_dependency_graph)(
-              (r1, r2, r3, r4, fake_ref))
-            expected_graph = {
-              r4: {r2, r3, r1},
-              r3: {r1},
-              r2: {r1},
-              r1: set(),
-              fake_ref: None}
+            with self.subTest(async_=async_, store=type(store).__name__):
+              self._async = async_
+              graph = await self._as_async(store.get_dependency_graph)(
+                (r1, r2, r3, r4, fake_ref))
+              expected_graph = {
+                r4: {r2, r3, r1},
+                r3: {r1},
+                r2: {r1},
+                r1: set(),
+                fake_ref: None}
 
-            self.assertEqual(graph, expected_graph)
+              self.assertEqual(graph, expected_graph)
 
   def test_backend_get_dependency_graph_depth(self):
     """Tests that getting dependency graphs up to a certain depth works."""
@@ -425,12 +430,13 @@ class StoreTest(unittest.IsolatedAsyncioTestCase):
       }
 
       for async_ in (False, True):
-        self._async = async_
-        dist_requirements = await self._as_async(
-            store.get_distribution_requirements)(
-          r4, expect_distribution_key=False)
+        with self.subTest(asnyc_=async_):
+          self._async = async_
+          dist_requirements = await self._as_async(
+              store.get_distribution_requirements)(
+            r4, expect_distribution_key=False)
 
-        self.assertEqual(dist_requirements, expected_dist_requirements)
+          self.assertEqual(dist_requirements, expected_dist_requirements)
 
   async def test_type_registration(self):
     with tempfile.TemporaryDirectory() as tmp_dir:
