@@ -606,7 +606,7 @@ class RunawayTasks(enact.AsyncInvokable):
 
   async def call(self, unused_value: enact.ResourceBase):
     sleep = Sleep()
-    sleeps = [sleep(i * 0.1) for i in range(10)]
+    sleeps = [asyncio.create_task(sleep(i * 0.1)) for i in range(10)]
     await asyncio.wait(sleeps, timeout=0.2)
 
 @enact.typed_invokable(type(None), int)

@@ -123,6 +123,9 @@ class DistributionRegistry:
       # resolved as built-in types, such as types defined in ipynb notebook
       # cells).
       return None
+    except OSError:
+      # Happens, e.g., in interactive python shells
+      return None
     return self.get_path_distribution_key(file)
 
 def register_distribution(
