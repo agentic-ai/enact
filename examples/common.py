@@ -15,10 +15,9 @@
 """Common functionality for notebooks."""
 
 import dataclasses
-import functools
 import io
 import os
-from typing import List, NamedTuple, Tuple, Type, TypeVar, Union
+from typing import List, Tuple, Type, TypeVar, Union
 
 import enact
 import PIL.Image
@@ -26,38 +25,14 @@ import numpy as np
 import replicate  # type: ignore
 import requests  # type: ignore
 
+import api_keys
+
+
+OPENAI_API_KEY = api_keys.OPENAI_API_KEY
+
+REPLICATE_API_KEY = api_keys.OPENAI_API_KEY
 
 _TIMEOUT = 20
-
-class APIKeyResolver(NamedTuple):
-  """Looks for an API key."""
-  name: str
-  env_var: str
-  file_path: str
-
-  @functools.lru_cache
-  def get(self) -> str:
-    if os.environ.get(self.env_var):
-      return os.environ[self.env_var]
-    try:
-      with open(os.path.expanduser(self.file_path), encoding='utf-8') as f:
-        return f.read().strip()
-    except FileNotFoundError:
-      # pylint: disable=raise-missing-from
-      raise APIKeyNotFound(
-          f'Plese provide {self.name} API key in environment variable '
-          f'{self.env_var} or in file {self.file_path}.')
-
-OPENAI_API_KEY = APIKeyResolver(
-  name='OpenAI',
-  env_var='OPENAI_API_KEY',
-  file_path='~/openai.key')
-
-REPLICATE_API_KEY = APIKeyResolver(
-  name='Replicate',
-  env_var='REPLICATE_API_KEY',
-  file_path='~/replicate.key')
-
 
 CHAT_GPT_URL = 'https://api.openai.com/v1/chat/completions'
 REPLICATE_URL = 'https://api.replicate.com/v1/predictions'
@@ -70,10 +45,6 @@ KANDINSKY_REPLICATE_VERSION = (
 SDXL_REPLICATE_VERSION = (
   'stability-ai/sdxl:'
   '8beff3369e81422112d93b89ca01426147de542cd4684c244b673b105188fe5f')
-
-
-class APIKeyNotFound(Exception):
-  """The API key was not found."""
 
 
 def kandinsky(prompt: str, **kwargs) -> PIL.Image.Image:
