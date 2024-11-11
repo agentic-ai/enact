@@ -40,7 +40,7 @@ therefore different from and complementary to libraries that focus on unified
 integrations (e.g., API wrappers) or on particular algorithm schemas for
 orchestrating generative flows (e.g., chain/tree-of-thought based approaches).
 
-See [why-enact](#why-enact) for a more in-depth discussion. 
+See [why-enact](#why-enact---a-manifesto) for a more in-depth discussion. 
 
 ## Installation and overview
 
@@ -223,9 +223,10 @@ _Output:_
 
 ## Documentation
 
-Full documentation is work in progress.
-See [enact concepts](examples/enact_concepts.ipynb) for more information,
-take a look at the [examples](examples/).
+Full documentation is work in progress.  See [enact
+concepts](examples/enact_concepts.ipynb) for more information, take a look at
+the [examples](examples/), e.g., how enact can be used to instantiate [generic
+MCTS](examples/generic_mcts.ipynb) for scaffolding programs.
 
 ## Why enact - A manifesto
 
