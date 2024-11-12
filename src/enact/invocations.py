@@ -177,6 +177,11 @@ class InvocationError(ExceptionResource):
 
 
 @resource_registry.register
+class InvocationBuildFailure(InvocationError):
+  """An error while building the invocation object."""
+
+
+@resource_registry.register
 class InvokableTypeError(InvocationError, TypeError):
   """An type error on a callable input or output."""
 
@@ -609,24 +614,30 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
       output_ref: Optional[references.Ref[O_co]],
       exception: Optional[Exception]):
     """Process a call result and set the invocation object."""
-    exception_ref: Optional[references.Ref[ExceptionResource]] = None
-    raised_here = False
-    if exception:
-      exception_ref = references.commit(
-        self._wrap_exception(exception))
-      self.exception_raised = exception
-      raised_here = not self._is_child_exception(exception)
-    subinvocations = self._get_subinvocations()
-    response: Response = Response(
-      references.commit(self.invokable), output_ref,
-      exception_ref, raised_here, children=subinvocations)
-    self._invocation = Invocation(
-      references.commit(self._request),
-      references.commit(response))
+    try:
+      exception_ref: Optional[references.Ref[ExceptionResource]] = None
+      raised_here = False
+      if exception:
+        exception_ref = references.commit(
+          self._wrap_exception(exception))
+        self.exception_raised = exception
+        raised_here = not self._is_child_exception(exception)
+      subinvocations = self._get_subinvocations()
+      response: Response = Response(
+        references.commit(self.invokable), output_ref,
+        exception_ref, raised_here, children=subinvocations)
+      self._invocation = Invocation(
+        references.commit(self._request),
+        references.commit(response))
+    except InvocationError:
+      raise
+    except Exception as e:
+      raise InvocationBuildFailure('Could not create invocation.') from e
 
   def call(self) -> O_co:
     """Call the invokable and set self.invocation."""
     with self:
+      invocation_error = False
       exception: Optional[Exception] = None
       output_ref: Optional[references.Ref[O_co]] = None
       try:
@@ -637,16 +648,21 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
           invokable, input_value)
         self._check_call_valid(input_value)
         output_ref = self._process_output(output_value)
+      except InvocationError:
+        invocation_error = True
+        raise
       except Exception as e:
         exception = e
         raise
       finally:
-        self._create_invocation(output_ref, exception)
+        if not invocation_error:
+          self._create_invocation(output_ref, exception)
       return cast(O_co, output_value)
 
   async def async_call(self) -> O_co:
     """Call the async invokable and set self.invocation."""
     with self:
+      invocation_error = False
       exception: Optional[Exception] = None
       output_ref: Optional[references.Ref[O_co]] = None
       try:
@@ -657,11 +673,15 @@ class Builder(Generic[I_contra, O_co], contexts.Context):
           invokable, input_value)
         self._check_call_valid(input_value)
         output_ref = self._process_output(output_value)
+      except InvocationError:
+        invocation_error = True
+        raise
       except Exception as e:
         exception = e
         raise
       finally:
-        self._create_invocation(output_ref, exception)
+        if not invocation_error:
+          self._create_invocation(output_ref, exception)
       return cast(O_co, output_value)
 
 class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
