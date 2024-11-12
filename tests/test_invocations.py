@@ -563,6 +563,23 @@ class InvocationsTest(unittest.TestCase):
       invocation = fun.invoke()
       self.assertEqual(invocation.get_output(), 'Foo')
 
+  def test_build_failure(self):
+    """Tests how errors are handled during invocations."""
+    # Intentionally leaving this unregistered.
+    class UnregisteredException(enact.ExceptionResource):
+      pass
+
+    @enact.register
+    def foo():
+      raise UnregisteredException('foo')
+    @enact.register
+    def bar():
+      return foo()
+
+    with self.store:
+      with self.assertRaises(invocations.InvocationBuildFailure):
+        asyncio.run(enact.invoke(bar))
+
 
 @enact.register
 @dataclasses.dataclass
@@ -810,3 +827,21 @@ class AsyncInvocationsTest(unittest.TestCase):
         return enact.commit(context + 1)
       invocation = asyncio.run(invocation.replay_async(exception_override))
       self.assertEqual(invocation.get_output(), list(range(1, 11)))
+
+  def test_build_failure(self):
+    """Tests how errors are handled during invocations."""
+    # Intentionally leaving this unregistered.
+    class UnregisteredException(enact.ExceptionResource):
+      pass
+
+    @enact.register
+    async def foo():
+      raise UnregisteredException('foo')
+    @enact.register
+    async def bar():
+      return await foo()
+
+    with self.store:
+      with self.assertRaises(invocations.InvocationBuildFailure):
+        asyncio.run(enact.invoke_async(bar))
+
