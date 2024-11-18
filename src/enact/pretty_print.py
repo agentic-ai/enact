@@ -174,20 +174,30 @@ def pformat(value: Any,
     skip_repeated_refs=skip_repeated_refs).pformat(value)
 
 
-def invocation_summary(invocation: invocations.Invocation, indent: int=0):
+def invocation_summary(
+    invocation: invocations.Invocation,
+    indent: int=0,
+    show_input=True,
+    show_output=True) -> str:
   """Return a reader-friendly invocation summary."""
   invokable = f'->{invocation.request().invokable()}'
   input_value = invocation.get_input()
-  if isinstance(input_value, function_wrappers.CallArgs):
-    args, kwargs = input_value.to_python_args()
-    str_args = (
-      [str(a) for a in args] +
-      [f'{k}={str(v)}' for k, v in kwargs.items()])
-    all_args = ', '.join(str_args)
+  if show_input:
+    if isinstance(input_value, function_wrappers.CallArgs):
+      args, kwargs = input_value.to_python_args()
+      str_args = (
+        [str(a) for a in args] +
+        [f'{k}={str(v)}' for k, v in kwargs.items()])
+      all_args = ', '.join(str_args)
+    else:
+      all_args = str(input_value)
   else:
-    all_args = str(input_value)
+    all_args = '...'
   if invocation.successful():
-    output = f'= {invocation.get_output()}'
+    if show_output:
+      output = f'= {invocation.get_output()}'
+    else:
+      output = ''
   elif invocation.response().raised:
     output = f'raised {invocation.get_raised()}'
   else:
@@ -196,6 +206,6 @@ def invocation_summary(invocation: invocations.Invocation, indent: int=0):
   prefix = '  ' * indent
   lines = [
     f'{prefix}{invokable}({all_args}) {output}',
-    *[f'{invocation_summary(child, indent + 1)}'
+    *[f'{invocation_summary(child, indent + 1, show_input, show_output)}'
       for child in invocation.get_children()]]
   return '\n'.join(lines)
