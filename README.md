@@ -53,7 +53,7 @@ pip install enact
 ### Invocations
 Enact recursively tracks inputs and outputs of functions registered with the
 framework. A record of an execution is called an `Invocation`, and can be
-persisted to a store. This is useful for tracking the behavior generative
+persisted to a store. This is useful for tracking the behavior of generative
 software.
 
 ```python
