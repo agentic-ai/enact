@@ -59,15 +59,16 @@ class RegistrationTest(unittest.TestCase):
     self.assertEqual(MyInvokable.get_output_type(), None)
 
   def test_type_inference_union(self):
-    """Tests type inference fails for union and optional types."""
+    """Tests type inference works for union and optional types."""
     @enact.register
     class MyInvokable(enact.Invokable):
       """Invokable for testing."""
 
       def call(self, x: Union[int, str]) -> Optional[str]:
         pass
-    self.assertEqual(MyInvokable.get_input_type(), None)
-    self.assertEqual(MyInvokable.get_output_type(), None)
+
+    self.assertEqual(MyInvokable.get_input_type(), Union[int, str])
+    self.assertEqual(MyInvokable.get_output_type(), Optional[str])
 
   def test_type_inference_no_arg(self):
     """Tests invokable type inference if the call function has no args."""

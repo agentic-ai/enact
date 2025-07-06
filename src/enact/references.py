@@ -553,7 +553,7 @@ class FileBackend(StorageBackend):
 
   def _get_type_path(self, type_key: types.TypeKey) -> str:
     type_id = json.dumps(type_key.as_dict()).encode('utf-8')
-    basename = f'type_{base64.b64encode(type_id).decode("utf-8")}'
+    basename = f'type_{base64.b64encode(type_id).decode('utf-8')}'
     return os.path.join(self._root_dir, basename)
 
   def _get_path(self, ref_id: str) -> str:

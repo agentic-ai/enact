@@ -17,7 +17,7 @@
 import inspect
 import types as types_module
 from typing import (
-  Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Set,
+  Any, Callable, Dict, Iterable, List, Mapping, Optional, Set,
   Type, TypeVar, Union, cast)
 
 from enact import distribution_registry
@@ -250,11 +250,6 @@ class Registry:
     func = c
     if inspect.ismethod(c):
       func = c.__func__
-    if not isinstance(func, Hashable):
-      raise interfaces.FieldTypeError(
-        'Only immutable callables (e.g. python functions) can be handled '
-        'using enact. If you need use callable python classes that are '
-        'mutable, consider subclassing from Invokable or AsyncInvokable.')
     function_wrapper_type = self._function_wrappers.get(func)
     if not function_wrapper_type:
       raise MissingWrapperError(
@@ -491,7 +486,7 @@ class FieldValueWrapper(interfaces.TypeWrapperBase[WrappedT]):
   def unwrap(self) -> WrappedT:
     """Unwrap a value directly."""
     assert isinstance(self.value, self.wrapped_type())
-    return from_field_value(self.value)
+    return from_field_value(self.value)  # type: ignore
 
 
 @register

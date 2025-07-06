@@ -1,2 +1,2 @@
 #!/bin/bash
-(cd tests && PYTHONPATH=:. python -m unittest)
+(cd tests && PYTHONPATH=:. uv run python -m unittest)

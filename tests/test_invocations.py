@@ -69,7 +69,7 @@ class Fail(enact.Invokable):
 @dataclasses.dataclass
 class NestedFunction(enact.Invokable):
   """A nested function that repeatedly calls another invokable."""
-  fun: enact.InvokableBase = AddOne()
+  fun: enact.InvokableBase = dataclasses.field(default_factory=AddOne)
   iter: int = 10
   fail_on: Optional[int] = None
 
