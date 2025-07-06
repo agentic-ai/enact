@@ -32,6 +32,7 @@ dev = [
     "mypy>=1.16.1",
     "numpy>=2.2.6",
     "openai>=1.93.0",
+    "pip>=25.1.1",
     "pylint>=3.3.7",
     "replicate>=1.0.7",
     "types-pillow>=10.2.0.20240822",
