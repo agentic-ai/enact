@@ -706,8 +706,7 @@ class _InvokableBase(Generic[I_contra, O_co], interfaces.ResourceBase):
   def _check_input_type(cls, value: Any):
     """Check the input type."""
     input_type: Optional[Type] = cls._enact_input_type
-    # pylint: disable=isinstance-second-argument-not-valid-type
-    if input_type and not isinstance(value, input_type):
+    if input_type and not isinstance(value, input_type):  # pylint: disable=isinstance-second-argument-not-valid-type
       raise InvokableTypeError(
         f'Input must be of type {cls._enact_input_type}, '
         f'but got {type(value)}.')

@@ -1,2 +1,2 @@
 #!/bin/bash
-(cd src && mypy enact --check-untyped-defs)
+(cd src && uv run mypy enact --check-untyped-defs)

@@ -30,17 +30,27 @@ Registerable = Union[
 RegisterableT = TypeVar('RegisterableT', bound=Registerable)
 
 
+def _runtime_checkable(t) -> bool:
+  """Returns whether the object is runtime typecheckable against."""
+  try:
+    isinstance(0, t)
+  except TypeError:
+    return False
+  return True
+
+
 def _to_python_type(t) -> Optional[Type]:
   """Try to extract a python type from a type annotation."""
   if t is None:
     return type(None)
   if t is inspect.Signature.empty:
     return None
-  if isinstance(t, type):
+  if _runtime_checkable(t):
     return t
   if hasattr(t, '__origin__'):  # Handle generics
-    if isinstance(t.__origin__, type):
-      return t.__origin__
+    origin = t.__origin__
+    if _runtime_checkable(origin):
+      return origin
   return None
 
 

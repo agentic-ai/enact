@@ -6,7 +6,7 @@ dependencies = [
 ]
 description = "A framework for generative software."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
@@ -22,4 +22,18 @@ where = ["src"]
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "fastapi>=0.115.14",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.7",
+    "jupyter>=1.1.1",
+    "mypy>=1.16.1",
+    "numpy>=2.2.6",
+    "openai>=1.93.0",
+    "pylint>=3.3.7",
+    "replicate>=1.0.7",
+    "types-pillow>=10.2.0.20240822",
+]
 

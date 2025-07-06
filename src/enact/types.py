@@ -205,7 +205,7 @@ class Union(TypeDescriptor):
   def pformat(self) -> str:
     """Pretty formats the descriptor."""
     value_pformats = [value_type.pformat() for value_type in self.value_types]
-    return f'{self.NAME}[{", ".join(value_pformats)}]'
+    return f'{self.NAME}[{', '.join(value_pformats)}]'
 
 
 @dataclasses.dataclass(frozen=True)
