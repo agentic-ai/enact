@@ -428,4 +428,4 @@ contributors that are excited about the vision. If you're interested in the
 project, feel free to reach out.
 
 You can download the source code, report issues and create pull requests at
-https://github.com/agentic-ai/enact.
+https://github.com/lcrh/enact.
