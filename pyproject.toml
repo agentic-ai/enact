@@ -1,12 +1,12 @@
 [project]
 name = "enact"
-version = "0.4.15"
+version = "0.4.16"
 dependencies = [
-  "wrapt",
+  "wrapt<2.0.0",
 ]
 description = "A framework for generative software."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
